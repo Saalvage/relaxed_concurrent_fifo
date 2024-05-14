@@ -4,24 +4,34 @@
 #include <utility>
 #include <optional>
 
-// TODO: How should a full queue be handled?
-// Currently popping from a full queue is not possible.
 template <typename T, size_t SIZE>
 class circular_buffer {
 private:
-	T buffer[SIZE];
+	static consteval size_t next_po2(size_t size) {
+		size_t it = 1;
+		while (it < size) {
+			it *= 2;
+		}
+		return it;
+	}
+
+	static constexpr size_t ACTUAL_SIZE = next_po2(SIZE);
+
+	// TODO: Always put data on the heap?
+	T buffer[ACTUAL_SIZE];
 
 	size_t head = 0;
 	size_t tail = 0;
 
-	inline size_t next(size_t curr) {
-		return (curr + 1) % SIZE;
-	}
-
 public:
-	void push(T t) {
-		head = next(head);
-		buffer[head] = std::move(t);
+	bool push(T t) {
+		if (head - tail == ACTUAL_SIZE) {
+			return false;
+		}
+
+		head++;
+		buffer[head % ACTUAL_SIZE] = std::move(t);
+		return true;
 	}
 
 	std::optional<T> pop() {
@@ -29,8 +39,8 @@ public:
 			return std::nullopt;
 		}
 
-		tail = next(tail);
-		return std::move(buffer[tail]);
+		tail++;
+		return std::move(buffer[tail % ACTUAL_SIZE]);
 	}
 };
 

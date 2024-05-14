@@ -7,9 +7,9 @@ static constexpr int COUNT = 512;
 
 template <template <typename, size_t> typename T>
 void test_full_capacity() {
-	T<int, COUNT + 1> buf;
+	T<int, COUNT> buf;
 	for (int i : std::views::iota(0, COUNT)) {
-		buf.push(i);
+		assert(buf.push(i));
 	}
 	for (int i : std::views::iota(0, COUNT)) {
 		assert(buf.pop() == i);
@@ -18,18 +18,18 @@ void test_full_capacity() {
 
 template <template <typename, size_t> typename T>
 void test_single_element() {
-	T<int, COUNT + 1> buf;
+	T<int, COUNT> buf;
 	for (int i : std::views::iota(0, COUNT * 10)) {
-		buf.push(i);
+		assert(buf.push(i));
 		assert(buf.pop() == i);
 	}
 }
 
 template <template <typename, size_t> typename T>
 void test_empty_pop() {
-	T<int, COUNT + 1> buf;
+	T<int, COUNT> buf;
 	assert(!buf.pop().has_value());
-	buf.push(1);
+	assert(buf.push(1));
 	buf.pop();
 	assert(!buf.pop().has_value());
 	for (int i : std::views::iota(0, COUNT * 10)) {
@@ -40,10 +40,18 @@ void test_empty_pop() {
 }
 
 template <template <typename, size_t> typename T>
+void test_full_push() {
+	T<int, 1> buf;
+	buf.push(1);
+	assert(!buf.push(1));
+}
+
+template <template <typename, size_t> typename T>
 void test_all() {
 	test_full_capacity<T>();
 	test_single_element<T>();
 	test_empty_pop<T>();
+	test_full_push<T>();
 }
 
 int main() {
