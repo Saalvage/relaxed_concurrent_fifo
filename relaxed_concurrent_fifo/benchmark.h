@@ -1,9 +1,11 @@
 #ifndef BENCHMARK_H_INCLUDED
 #define BENCHMARK_H_INCLUDED
 
+#include <cmath>
 #include <vector>
 #include <barrier>
 #include <thread>
+#include <atomic>
 #include <chrono>
 #include <numeric>
 #include <ranges>
@@ -27,7 +29,7 @@ private:
 	static size_t test_single(size_t num_threads) {
 		T<size_t, 32> fifo;
 		std::barrier a{ (ptrdiff_t)(num_threads + 1) };
-		volatile bool over = false;
+		std::atomic_bool over = false;
 		std::vector<std::jthread> threads(num_threads);
 		std::vector<size_t> results(num_threads);
 		for (size_t i = 0; i < num_threads; i++) {
