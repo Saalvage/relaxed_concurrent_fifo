@@ -3,6 +3,7 @@
 
 #include <utility>
 #include <optional>
+#include <mutex>
 
 template <typename T, size_t SIZE>
 class circular_buffer {
@@ -23,8 +24,12 @@ private:
 	size_t head = 0;
 	size_t tail = 0;
 
+	std::mutex mut;
+
 public:
 	bool push(T t) {
+		std::scoped_lock lock(mut);
+
 		if (head - tail == ACTUAL_SIZE) {
 			return false;
 		}
@@ -35,6 +40,8 @@ public:
 	}
 
 	std::optional<T> pop() {
+		std::scoped_lock lock(mut);
+
 		if (head == tail) {
 			return std::nullopt;
 		}
