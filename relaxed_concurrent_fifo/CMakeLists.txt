@@ -3,7 +3,7 @@
 #
 
 # Add source to this project's executable.
-add_executable (relaxed_concurrent_fifo "relaxed_concurrent_fifo.cpp" "relaxed_concurrent_fifo.h")
+add_executable (relaxed_concurrent_fifo "relaxed_concurrent_fifo.cpp" "relaxed_concurrent_fifo.h" "benchmark.h")
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET relaxed_concurrent_fifo PROPERTY CXX_STANDARD 20)

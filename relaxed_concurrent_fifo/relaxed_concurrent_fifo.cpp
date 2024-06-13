@@ -1,7 +1,10 @@
 ﻿#include "relaxed_concurrent_fifo.h"
 
+#include "benchmark.h"
+
 #include <ranges>
 #include <cassert>
+#include <iostream>
 
 static constexpr int COUNT = 512;
 
@@ -55,6 +58,12 @@ void test_all() {
 }
 
 int main() {
-	test_all<circular_buffer>();
+	//test_all<circular_buffer>();
+	benchmark<circular_buffer> a;
+	for (auto i : {1, 2, 4, 8, 16, 32, 64}) {
+		auto [avg, std] = a.test(i, 5);
+		std::cout << "T: " << i << '\n';
+		std::cout << "AVG: " << avg << "; STD: " << std << std::endl;
+	}
 	return 0;
 }
