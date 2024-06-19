@@ -1,6 +1,8 @@
 #ifndef BENCHMARK_H_INCLUDED
 #define BENCHMARK_H_INCLUDED
 
+#include "fifo.h"
+
 #include <cmath>
 #include <vector>
 #include <barrier>
@@ -10,24 +12,33 @@
 #include <numeric>
 #include <ranges>
 
-template <template <typename, size_t> typename T>
-class benchmark {
+class benchmark_base {
+	virtual std::vector<size_t> test(size_t num_threads, size_t num_its) const = 0;
+	virtual const std::string& get_name() const = 0;
+};
+
+template <template <typename, size_t> typename T> requires fifo<T>
+class benchmark : benchmark_base {
 public:
-	static std::tuple<double, double> test(size_t num_threads, size_t num_its) {
+	benchmark(std::string name) : name(std::move(name)) { }
+
+	const std::string& get_name() const {
+		return name;
+	}
+
+	std::vector<size_t> test(size_t num_threads, size_t num_its) const override {
 		std::vector<size_t> results(num_its);
 		for (auto i : std::views::iota((size_t)0, num_its)) {
 			results[i] = test_single(num_threads);
 		}
-		auto avg = std::reduce(results.begin(), results.end()) / (double)num_its;
-		auto std = std::sqrt(std::accumulate(results.begin(), results.end(), 0., [=](double it, size_t right) {
-			return it + (right - avg) * (right - avg);
-		}) / num_its);
-		return std::tie(avg, std);
+		return results;
 	}
 
 private:
+	std::string name;
+
 	static size_t test_single(size_t num_threads) {
-		T<size_t, 32> fifo;
+		T<size_t, 1024> fifo;
 		std::barrier a{ (ptrdiff_t)(num_threads + 1) };
 		std::atomic_bool over = false;
 		std::vector<std::jthread> threads(num_threads);

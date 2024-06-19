@@ -1,10 +1,12 @@
-﻿#include "relaxed_concurrent_fifo.h"
+﻿#include "benchmark.h"
 
-#include "benchmark.h"
+#include "lock_fifo.h"
+#include "relaxed_fifo.h"
 
 #include <ranges>
 #include <cassert>
-#include <iostream>
+#include <filesystem>
+#include <fstream>
 
 static constexpr int COUNT = 512;
 
@@ -58,12 +60,26 @@ void test_all() {
 }
 
 int main() {
-	//test_all<circular_buffer>();
-	benchmark<circular_buffer> a;
-	for (auto i : {1, 2, 4, 8, 16, 32, 64}) {
-		auto [avg, std] = a.test(i, 5);
-		std::cout << "T: " << i << '\n';
-		std::cout << "AVG: " << avg << "; STD: " << std << std::endl;
+	namespace fs = std::filesystem;
+
+	constexpr const char* latest = "fifo-data-latest.csv";
+	constexpr const char* format = "fifo-data-{:%FT%H-%M-%S}.csv";
+
+	if (fs::exists(latest)) {
+		auto write_time = fs::last_write_time(latest);
+		fs::rename(latest, std::format(format, std::chrono::round<std::chrono::seconds>(write_time)));
 	}
+
+	std::ofstream file{latest};
+
+	for (const auto& imp : {benchmark<lock_fifo>{"lock"}}) {
+		//test_all<lock_fifo>();
+		for (auto i : {1, 2, 4, 8, 16, 32, 64}) {
+			for (auto res : imp.test(i, 1)) {
+				file << imp.get_name() << "," << i << ',' << res << '\n';
+			}
+		}
+	}
+
 	return 0;
 }
