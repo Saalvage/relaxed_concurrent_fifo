@@ -66,6 +66,7 @@ public:
 		// Get random cell within block and try to insert into it.
 		auto* header = get_header(locals.head_block);
 		auto offset = within_block_dist(generator);
+		(void)offset;
 		std::atomic<T>* res = (std::atomic<T>*)(header + within_block_dist(generator));
 		T val = *res;
 		if (val == 0 && std::atomic_compare_exchange_strong(res, &val, t)) {

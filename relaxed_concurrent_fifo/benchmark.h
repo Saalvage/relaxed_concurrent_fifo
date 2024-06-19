@@ -22,7 +22,7 @@ class benchmark : benchmark_base {
 public:
 	benchmark(std::string name) : name(std::move(name)) { }
 
-	const std::string& get_name() const {
+	const std::string& get_name() const override {
 		return name;
 	}
 
