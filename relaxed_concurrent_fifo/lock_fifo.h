@@ -51,6 +51,10 @@ public:
 		tail++;
 		return std::move(buffer[tail % SIZE]);
 	}
+
+	using handle = lock_fifo&;
+
+	handle get_handle() { return *this; }
 };
 static_assert(fifo<lock_fifo>);
 
