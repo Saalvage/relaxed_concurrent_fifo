@@ -13,12 +13,14 @@
 #include <ranges>
 
 class benchmark_base {
-	virtual std::vector<size_t> test(size_t num_threads, size_t num_its) const = 0;
+public:
+	virtual ~benchmark_base() = default;
+	virtual std::vector<size_t> test(size_t num_threads, size_t num_its, size_t test_time_seconds) const = 0;
 	virtual const std::string& get_name() const = 0;
 };
 
 template <template <typename, size_t> typename T> requires fifo<T>
-class benchmark : benchmark_base {
+class benchmark : public benchmark_base {
 public:
 	benchmark(std::string name) : name(std::move(name)) { }
 
@@ -26,10 +28,10 @@ public:
 		return name;
 	}
 
-	std::vector<size_t> test(size_t num_threads, size_t num_its) const override {
+	std::vector<size_t> test(size_t num_threads, size_t num_its, size_t test_time_seconds) const override {
 		std::vector<size_t> results(num_its);
 		for (auto i : std::views::iota((size_t)0, num_its)) {
-			results[i] = test_single(num_threads);
+			results[i] = test_single(num_threads, test_time_seconds);
 		}
 		return results;
 	}
@@ -37,8 +39,11 @@ public:
 private:
 	std::string name;
 
-	static size_t test_single(size_t num_threads) {
+	static size_t test_single(size_t num_threads, size_t test_time_seconds) {
 		T<size_t, 1024> fifo;
+		for (size_t i = 0; i < 512; i++) {
+			fifo.push(i);
+		}
 		std::barrier a{ (ptrdiff_t)(num_threads + 1) };
 		std::atomic_bool over = false;
 		std::vector<std::jthread> threads(num_threads);
@@ -57,7 +62,7 @@ private:
 		}
 		auto start = std::chrono::system_clock::now();
 		a.arrive_and_wait();
-		std::this_thread::sleep_until(start + std::chrono::seconds(10));
+		std::this_thread::sleep_until(start + std::chrono::seconds(test_time_seconds));
 		over = true;
 		for (auto& thread : threads) {
 			thread.join();

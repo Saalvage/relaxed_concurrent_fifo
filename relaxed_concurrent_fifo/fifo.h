@@ -3,6 +3,7 @@
 
 #include <concepts>
 #include <optional>
+#include <cstdint>
 
 template <template <typename, size_t> typename T>
 concept fifo = std::constructible_from<size_t> && requires(T<uint64_t, 32> fifo, T<uint64_t, 32>::handle handle, uint64_t u) {
