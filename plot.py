@@ -2,8 +2,9 @@ import csv
 import matplotlib.pyplot as plt
 
 class impl:
-    x = []
-    y = []
+    def __init__(self):
+        self.x = []
+        self.y = []
 
 impls = { }
 
