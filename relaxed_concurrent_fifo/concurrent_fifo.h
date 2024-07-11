@@ -31,8 +31,9 @@ private:
 	std::atomic<size_t> head = 0;
 	std::atomic<size_t> tail = 0;
 
-	static constexpr uint64_t slot_to_epoch(uint64_t epoch, bool written) {
-		return (epoch & (1ull << 63)) | (static_cast<uint64_t>(written) << 63);
+
+	static constexpr uint64_t slot_to_epoch(uint64_t index, bool written) {
+		return ((index) & ~(1ull << 63)) | (static_cast<uint64_t>(written) << 63);
 	}
 
 public:
@@ -45,9 +46,9 @@ public:
 	bool push(T t) {
 		size_t slot;
 
+		slot = head.load();
 		do {
-			slot = head.load();
-			if (slot - tail == SIZE) {
+			if (slot - tail >= SIZE) {
 				return false;
 			}
 		} while (!head.compare_exchange_weak(slot, slot + 1));
@@ -61,9 +62,8 @@ public:
 	}
 
 	std::optional<T> pop() {
-		size_t slot;
+		size_t slot = tail.load();
 		do {
-			slot = tail.load();
 			if (slot == head) {
 				return std::nullopt;
 			}
@@ -72,7 +72,7 @@ public:
 		auto my_epoch = slot_to_epoch(slot, true);
 		while (buffer[slot % SIZE].epoch != my_epoch) { }
 		auto ret = buffer[slot % SIZE].value.load();
-		buffer[slot % SIZE].epoch.store(slot_to_epoch(slot, false));
+		buffer[slot % SIZE].epoch.store(slot_to_epoch(slot + SIZE, false));
 
 		return ret;
 	}
