@@ -1,5 +1,6 @@
 import csv
 import matplotlib.pyplot as plt
+import sys
 
 class impl:
     def __init__(self):
@@ -8,7 +9,9 @@ class impl:
 
 impls = { }
 
-with open("fifo-data-latest.csv") as file:
+file = sys.argv[1] if len(sys.argv) == 2 else input("Please enter the .csv data file: ")
+
+with open(file) as file:
     lines = csv.reader(file)
     for row in lines:
         name = row[0]

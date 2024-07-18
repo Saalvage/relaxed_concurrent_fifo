@@ -64,34 +64,31 @@ void test_all() {
 int main() {
 	namespace fs = std::filesystem;
 
-	constexpr const char* latest = "fifo-data-latest.csv";
-	constexpr const char* format = "fifo-data-{:%FT%H-%M-%S}.csv";
+	constexpr const char* format = "fifo-data-{}-{:%FT%H-%M-%S}.csv";
 
 	/*concurrent_fifo<uint64_t, 1024> a;
 	auto& handle = a.get_handle();
 	handle.push(2);
 	auto ret = handle.pop();*/
 
-	if (fs::exists(latest)) {
-		auto write_time = fs::last_write_time(latest);
-		fs::rename(latest, std::format(format, std::chrono::round<std::chrono::seconds>(write_time)));
-	}
-
-	std::ofstream file{latest};
-
+	static constexpr double PREFILL_AMOUNTS[] = {0, 0.5, 1};
 	static constexpr int TEST_TIME_SECONDS = 10;
 	static constexpr int TEST_ITERATIONS = 1;
 	static constexpr int PROCESSOR_COUNTS[] = {1, 2, 4, 8, 16};
 	std::unique_ptr<benchmark_base> instances[] = {std::make_unique<benchmark<lock_fifo>>("lock"), std::make_unique<benchmark<concurrent_fifo>>("concurrent")};
 
-	std::cout << "Expected running time: " << TEST_ITERATIONS * TEST_TIME_SECONDS * sizeof(PROCESSOR_COUNTS) / sizeof(*PROCESSOR_COUNTS) * sizeof(instances) / sizeof(*instances) << " seconds" << std::endl;
-	for (const auto& imp : instances) {
-		std::cout << "Testing " << imp->get_name() << std::endl;
-		//test_all<lock_fifo>();
-		for (auto i : PROCESSOR_COUNTS) {
-			std::cout << "With " << i << " processors" << std::endl;
-			for (auto res : imp->test(i, TEST_ITERATIONS, TEST_TIME_SECONDS)) {
-				file << imp->get_name() << "," << i << ',' << res << '\n';
+	std::cout << "Expected running time: " << sizeof(PREFILL_AMOUNTS) / sizeof(*PREFILL_AMOUNTS) * TEST_ITERATIONS * TEST_TIME_SECONDS * sizeof(PROCESSOR_COUNTS) / sizeof(*PROCESSOR_COUNTS) * sizeof(instances) / sizeof(*instances) << " seconds" << std::endl;
+	for (auto prefill : PREFILL_AMOUNTS) {
+		std::cout << "Prefilling with " << prefill << std::endl;
+		std::ofstream file{std::format(format, prefill, std::chrono::round<std::chrono::seconds>(std::chrono::file_clock::now()))};
+		for (const auto& imp : instances) {
+			std::cout << "Testing " << imp->get_name() << std::endl;
+			//test_all<lock_fifo>();
+			for (auto i : PROCESSOR_COUNTS) {
+				std::cout << "With " << i << " processors" << std::endl;
+				for (auto res : imp->test(i, TEST_ITERATIONS, TEST_TIME_SECONDS, prefill)) {
+					file << imp->get_name() << "," << i << ',' << res << '\n';
+				}
 			}
 		}
 	}

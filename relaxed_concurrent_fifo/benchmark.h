@@ -15,7 +15,7 @@
 class benchmark_base {
 public:
 	virtual ~benchmark_base() = default;
-	virtual std::vector<size_t> test(size_t num_threads, size_t num_its, size_t test_time_seconds) const = 0;
+	virtual std::vector<size_t> test(size_t num_threads, size_t num_its, size_t test_time_seconds, double prefill_amount) const = 0;
 	virtual const std::string& get_name() const = 0;
 };
 
@@ -28,10 +28,10 @@ public:
 		return name;
 	}
 
-	std::vector<size_t> test(size_t num_threads, size_t num_its, size_t test_time_seconds) const override {
+	std::vector<size_t> test(size_t num_threads, size_t num_its, size_t test_time_seconds, double prefill_amount) const override {
 		std::vector<size_t> results(num_its);
 		for (auto i : std::views::iota((size_t)0, num_its)) {
-			results[i] = test_single(num_threads, test_time_seconds);
+			results[i] = test_single(num_threads, test_time_seconds, prefill_amount);
 		}
 		return results;
 	}
@@ -39,9 +39,9 @@ public:
 private:
 	std::string name;
 
-	static size_t test_single(size_t num_threads, size_t test_time_seconds) {
+	static size_t test_single(size_t num_threads, size_t test_time_seconds, double prefill_amount) {
 		T<size_t, 1024> fifo;
-		for (size_t i = 0; i < 512; i++) {
+		for (size_t i = 0; i < prefill_amount * 1024; i++) {
 			fifo.push(i);
 		}
 		std::barrier a{ (ptrdiff_t)(num_threads + 1) };
