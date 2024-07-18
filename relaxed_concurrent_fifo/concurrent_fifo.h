@@ -3,42 +3,41 @@
 
 #include "fifo.h"
 
+#include "utility.h"
+
 #include <utility>
 #include <optional>
 #include <mutex>
 #include <memory>
 
-template <typename T, size_t SIZE>
+template <typename T>
 class concurrent_fifo {
 private:
-	static consteval bool is_po2(size_t size) {
-		size_t it = 1;
-		while (it < size) {
-			it *= 2;
-		}
-		return it == size;
-	}
-
-	static_assert(is_po2(SIZE), "Please only use sizes that are a power of two as this allows for more efficient code generation");
-
 	struct slot {
 		std::atomic<T> value;
 		std::atomic<uint64_t> epoch;
 	};
 
-	std::unique_ptr<slot[]> buffer = std::make_unique<slot[]>(SIZE);
+	std::unique_ptr<slot[]> buffer;
 
 	std::atomic<size_t> head = 0;
 	std::atomic<size_t> tail = 0;
 
+	std::size_t capacity;
 
 	static constexpr uint64_t slot_to_epoch(uint64_t index, bool written) {
 		return ((index) & ~(1ull << 63)) | (static_cast<uint64_t>(written) << 63);
 	}
 
 public:
-	concurrent_fifo() {
-		for (size_t i = 0; i < SIZE; i++) {
+	concurrent_fifo(size_t capacity) : capacity(capacity) {
+		if (!is_po2(capacity)) {
+			throw std::runtime_error("Please only use capacities that are a power of two");
+		}
+
+		buffer = std::make_unique<slot[]>(capacity);
+
+		for (size_t i = 0; i < capacity; i++) {
 			buffer[i].epoch = slot_to_epoch(i, false);
 		}
 	}
@@ -48,15 +47,16 @@ public:
 
 		slot = head.load();
 		do {
-			if (slot - tail >= SIZE) {
+			if (slot - tail >= capacity) {
 				return false;
 			}
 		} while (!head.compare_exchange_weak(slot, slot + 1));
 
 		auto my_epoch = slot_to_epoch(slot, false);
-		while (buffer[slot % SIZE].epoch != my_epoch) { }
-		buffer[slot % SIZE].value.store(t);
-		buffer[slot % SIZE].epoch.store(slot_to_epoch(slot, true));
+		auto my_index = modulo_po2(slot, capacity);
+		while (buffer[my_index].epoch != my_epoch) { }
+		buffer[my_index].value.store(t);
+		buffer[my_index].epoch.store(slot_to_epoch(slot, true));
 
 		return true;
 	}
@@ -70,9 +70,10 @@ public:
 		} while (!tail.compare_exchange_weak(slot, slot + 1));
 
 		auto my_epoch = slot_to_epoch(slot, true);
-		while (buffer[slot % SIZE].epoch != my_epoch) { }
-		auto ret = buffer[slot % SIZE].value.load();
-		buffer[slot % SIZE].epoch.store(slot_to_epoch(slot + SIZE, false));
+		auto my_index = modulo_po2(slot, capacity);
+		while (buffer[my_index].epoch != my_epoch) { }
+		auto ret = buffer[my_index].value.load();
+		buffer[my_index].epoch.store(slot_to_epoch(slot + capacity, false));
 
 		return ret;
 	}

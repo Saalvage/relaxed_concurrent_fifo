@@ -21,7 +21,7 @@ public:
 	virtual const std::string& get_name() const = 0;
 };
 
-template <template <typename, size_t> typename T> requires fifo<T>
+template <template <typename> typename T> requires fifo<T>
 class benchmark : public benchmark_base {
 public:
 	benchmark(std::string name) : name(std::move(name)) { }
@@ -42,7 +42,7 @@ private:
 	std::string name;
 
 	static size_t test_single(size_t num_threads, size_t test_time_seconds, double prefill_amount) {
-		T<size_t, 1024> fifo;
+		T<size_t> fifo{1024};
 		for (size_t i = 0; i < prefill_amount * 1024; i++) {
 			fifo.push(i);
 		}

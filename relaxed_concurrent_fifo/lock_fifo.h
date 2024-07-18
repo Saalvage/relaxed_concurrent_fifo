@@ -3,41 +3,43 @@
 
 #include "fifo.h"
 
+#include "utility.h"
+
 #include <utility>
 #include <optional>
 #include <mutex>
 #include <memory>
 
-template <typename T, size_t SIZE>
+template <typename T>
 class lock_fifo {
 private:
-	static consteval bool is_po2(size_t size) {
-		size_t it = 1;
-		while (it < size) {
-			it *= 2;
-		}
-		return it == size;
-	}
-
-	static_assert(is_po2(SIZE), "Please only use sizes that are a power of two as this allows for more efficient code generation");
-
-	std::unique_ptr<T[]> buffer = std::make_unique<T[]>(SIZE);
+	std::unique_ptr<T[]> buffer;
 
 	size_t head = 0;
 	size_t tail = 0;
 
+	size_t capacity;
+
 	std::mutex mut;
 
 public:
+	lock_fifo(size_t capacity) : capacity(capacity) {
+		if (!is_po2(capacity)) {
+			throw std::runtime_error("Please only use capacities that are a power of two");
+		}
+
+		buffer = std::make_unique<T[]>(capacity);
+	}
+
 	bool push(T t) {
 		std::scoped_lock lock(mut);
 
-		if (head - tail == SIZE) {
+		if (head - tail == capacity) {
 			return false;
 		}
 
 		head++;
-		buffer[head % SIZE] = std::move(t);
+		buffer[modulo_po2(head, capacity)] = std::move(t);
 		return true;
 	}
 
@@ -49,7 +51,7 @@ public:
 		}
 
 		tail++;
-		return std::move(buffer[tail % SIZE]);
+		return std::move(buffer[modulo_po2(tail, capacity)]);
 	}
 
 	using handle = lock_fifo&;

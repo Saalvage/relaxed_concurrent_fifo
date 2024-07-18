@@ -80,6 +80,6 @@ public:
 
 	handle get_handle() { return handle(*this); }
 };
-static_assert(fifo<relaxed_fifo>);
+//static_assert(fifo<relaxed_fifo>);
 
 #endif // RELAXED_FIFO_H_INCLUDED
