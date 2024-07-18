@@ -11,6 +11,8 @@
 #include <chrono>
 #include <numeric>
 #include <ranges>
+#include <future>
+#include <iostream>
 
 class benchmark_base {
 public:
@@ -64,9 +66,17 @@ private:
 		a.arrive_and_wait();
 		std::this_thread::sleep_until(start + std::chrono::seconds(test_time_seconds));
 		over = true;
-		for (auto& thread : threads) {
-			thread.join();
+		auto joined = std::async([&]() {
+			for (auto& thread : threads) {
+				thread.join();
+			}
+		});
+
+		if (joined.wait_for(std::chrono::seconds(10)) == std::future_status::timeout) {
+			std::cout << "Threads did not complete within timeout, assuming deadlock!" << std::endl;
+			std::exit(1);
 		}
+
 		return std::reduce(results.begin(), results.end());
 	}
 };
