@@ -78,9 +78,9 @@ public:
 		return ret;
 	}
 
-	using handle = concurrent_fifo&;
+	using handle = wrapper_handle<concurrent_fifo, T>;
 
-	handle get_handle() { return *this; }
+	handle get_handle() { return handle(this); }
 };
 static_assert(fifo<concurrent_fifo>);
 

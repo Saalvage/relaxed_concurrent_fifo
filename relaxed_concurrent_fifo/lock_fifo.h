@@ -53,10 +53,10 @@ public:
 		tail++;
 		return std::move(buffer[modulo_po2(tail, capacity)]);
 	}
+	
+	using handle = wrapper_handle<lock_fifo, T>;
 
-	using handle = lock_fifo&;
-
-	handle get_handle() { return *this; }
+	handle get_handle() { return handle(this); }
 };
 static_assert(fifo<lock_fifo>);
 
