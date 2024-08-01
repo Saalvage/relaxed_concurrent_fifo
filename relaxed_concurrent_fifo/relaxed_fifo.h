@@ -6,6 +6,9 @@
 #include <atomic>
 #include <random>
 #include <new>
+#include <bitset>
+
+#include "atomic_bitset.h"
 
 template <typename T, size_t SIZE>
 class relaxed_fifo {
@@ -39,6 +42,7 @@ private:
 	}
 
 	struct window {
+		atomic_bitset<blocks_per_window()> occupied_set;
 		block blocks[blocks_per_window()];
 	};
 
@@ -51,11 +55,11 @@ private:
 	std::atomic_uint64_t read_window = 1;
 	std::atomic_uint64_t write_window = 2;
 
+	window& get_read_window() { return buffer[read_window % window_count()]; }
+	window& get_write_window() { return buffer[write_window % window_count()]; }
+
 	std::atomic_bool read_wants_move;
 	std::atomic_bool write_wants_move;
-
-	std::atomic_uint8_t read_occupied_set;
-	std::atomic_uint8_t write_occupied_set;
 
 	std::atomic_uint8_t read_currently_claiming;
 	std::atomic_uint8_t write_currently_claiming;
@@ -84,16 +88,19 @@ public:
 
 		std::random_device dev;
 		std::mt19937 rng{dev()};
-		std::uniform_int_distribution<uint16_t> dist{0, static_cast<uint16_t>(blocks_per_window())};
+		// TODO: Check template parameter here.
+		std::uniform_int_distribution<size_t> dist{0, blocks_per_window() - 1};
 
-		uint8_t get_free_bit(uint8_t bit) {
+		// TODO: Simply continuously set bits from a given starting point?
+		size_t get_free_bit(const atomic_bitset<blocks_per_window()>& bits) {
 			auto off = dist(rng);
-			for (uint8_t i = 0; i < 8; i++) {
-				if (((bit >> i) & 1) == 0) {
-					return i;
+			for (size_t i = 0; i < bits.size(); i++) {
+				auto idx = (i + off) % bits.size();
+				if (!bits[idx]) {
+					return idx;
 				}
 			}
-			return std::numeric_limits<uint8_t>::max();
+			return std::numeric_limits<size_t>::max();
 		}
 
 		void claim_new_block(header* header) {
@@ -113,11 +120,10 @@ public:
 				header->operation_active = false;
 			}
 
-			uint8_t free_bit;
-			uint8_t occupied_set = fifo.write_occupied_set;
+			size_t free_bit;
 			do {
-				free_bit = get_free_bit(occupied_set);
-				if (free_bit == std::numeric_limits<uint8_t>::max()) {
+				free_bit = get_free_bit(fifo.get_write_window().occupied_set);
+				if (free_bit == std::numeric_limits<size_t>::max()) {
 					bool expected = false;
 					if (fifo.write_wants_move.compare_exchange_strong(expected, true)) {
 						// We're now moving the window!
@@ -126,14 +132,12 @@ public:
 						if (header) {
 							header->operation_active = false;
 						}
-						for (block& block : fifo.buffer[fifo.write_window % window_count()].blocks) {
+						for (block& block : fifo.get_write_window().blocks) {
 							// Busy wait until operation concludes.
 							while (block.header.operation_active) { }
 							// Clean up header.
 							block.header.active_handle_id = 0;
 						}
-						// Now no block can be active.
-						fifo.write_occupied_set = 0;
 						auto new_window = fifo.write_window + 1;
 						if ((new_window - fifo.read_window) % window_count() != 0) {
 							fifo.write_window = new_window;
@@ -143,8 +147,7 @@ public:
 						}
 						// Reset values for loop.
 						header = nullptr; // We don't have a header now because the window just moved and we need a new block from the new window!
-						occupied_set = fifo.write_occupied_set;
-						free_bit = get_free_bit(occupied_set);
+						free_bit = get_free_bit(fifo.get_write_window().occupied_set);
 						fifo.write_wants_move = false;
 					} else {
 						// Someone else is already moving the window, we give up the block and wait until they're done.
@@ -156,12 +159,12 @@ public:
 						return;
 					}
 				}
-			} while (!fifo.write_occupied_set.compare_exchange_strong(occupied_set, occupied_set | (1 << free_bit)));
+			} while (!fifo.get_write_window().occupied_set.set(free_bit));
 			current_window = fifo.write_window;
 			write_block = &fifo.buffer[current_window % window_count()].blocks[free_bit];
 			// TODO: Consider what could happen between claiming the block via the occupied set and setting the id here (if stealing was possible).
 			header = &write_block->header;
-			// The order here is important, we first set the state to active, then decrease the claim counter, otherwise  
+			// The order here is important, we first set the state to active, then decrease the claim counter, otherwise a new window switch might occur inbetween.
 			header->operation_active = true;
 			header->active_handle_id = id; // TODO: Maybe CAS to detect stealing or sth? TODO Writers don't ever use this!
 			fifo.write_currently_claiming--;
