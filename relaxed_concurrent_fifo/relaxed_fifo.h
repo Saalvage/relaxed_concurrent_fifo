@@ -5,6 +5,7 @@
 #include <memory>
 #include <atomic>
 #include <random>
+#include <new>
 
 template <typename T, size_t SIZE>
 class relaxed_fifo {
@@ -14,11 +15,10 @@ private:
 	static_assert(sizeof(T) == 8);
 	static_assert(sizeof(std::atomic<T>) == 8);
 
-	struct header {
+	struct alignas(8) header {
 		std::atomic_bool operation_active;
 		std::atomic<handle_id> active_handle_id;
 		std::atomic_uint16_t curr_index;
-		uint32_t padding;
 	};
 	static_assert(sizeof(header) == 8);
 
@@ -82,7 +82,12 @@ public:
 
 		friend relaxed_fifo;
 
-		static constexpr uint8_t first_free_bit(uint8_t bit) {
+		std::random_device dev;
+		std::mt19937 rng{dev()};
+		std::uniform_int_distribution<uint16_t> dist{0, static_cast<uint16_t>(blocks_per_window())};
+
+		uint8_t get_free_bit(uint8_t bit) {
+			auto off = dist(rng);
 			for (uint8_t i = 0; i < 8; i++) {
 				if (((bit >> i) & 1) == 0) {
 					return i;
@@ -111,7 +116,7 @@ public:
 			uint8_t free_bit;
 			uint8_t occupied_set = fifo.write_occupied_set;
 			do {
-				free_bit = first_free_bit(occupied_set);
+				free_bit = get_free_bit(occupied_set);
 				if (free_bit == std::numeric_limits<uint8_t>::max()) {
 					bool expected = false;
 					if (fifo.write_wants_move.compare_exchange_strong(expected, true)) {
@@ -139,7 +144,7 @@ public:
 						// Reset values for loop.
 						header = nullptr; // We don't have a header now because the window just moved and we need a new block from the new window!
 						occupied_set = fifo.write_occupied_set;
-						free_bit = first_free_bit(occupied_set);
+						free_bit = get_free_bit(occupied_set);
 						fifo.write_wants_move = false;
 					} else {
 						// Someone else is already moving the window, we give up the block and wait until they're done.
