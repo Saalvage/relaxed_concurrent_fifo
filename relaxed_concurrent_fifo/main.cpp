@@ -66,10 +66,14 @@ int main() {
 
 	constexpr const char* format = "fifo-data-{}-{:%FT%H-%M-%S}.csv";
 
-	/*concurrent_fifo<uint64_t, 1024> a;
-	auto& handle = a.get_handle();
-	handle.push(2);
-	auto ret = handle.pop();*/
+	relaxed_fifo<uint64_t, 1024> a;
+	auto handle = a.get_handle();
+	for (auto _ : std::views::iota(0, 1000)) {
+		(void)_;
+		std::cout << _ << std::endl;
+		handle.push(2);
+	}
+	//auto ret = handle.pop();
 
 	static constexpr double PREFILL_AMOUNTS[] = {0, 0.5, 1};
 	static constexpr int TEST_TIME_SECONDS = 10;
