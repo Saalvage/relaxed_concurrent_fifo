@@ -171,7 +171,6 @@ push_start:
 			if (current_window != fifo.write_window) {
 				// The window moved!
 				claim_new_block(nullptr);
-				goto ready_to_write;
 			}
 
 			if (fifo.write_wants_move) {
@@ -179,7 +178,6 @@ push_start:
 					// TODO: Maybe something better than busy waiting?
 				}
 				claim_new_block(nullptr);
-				goto ready_to_write;
 			}
 
 			header* header = &write_block->header;
@@ -204,7 +202,6 @@ push_start:
 				header = &write_block->header;
 			}
 
-ready_to_write:
 			write_block->cells[header->curr_index++] = std::move(t);
 			
 			return true;
