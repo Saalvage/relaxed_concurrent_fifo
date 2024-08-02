@@ -15,12 +15,22 @@ class relaxed_fifo {
 private:
 	using handle_id = uint8_t;
 
+	// TODO: We likely want the state to include the claiming thread as well.
+	// 14 bits epoch, 1 bit write/read, 1 bit inactive/active
+	using state = uint16_t;
+
 	static_assert(sizeof(T) == 8);
 	static_assert(sizeof(std::atomic<T>) == 8);
 
+	static constexpr state make_active(state marker) { return marker | 1; }
+	static constexpr state make_inactive(state marker) { return marker ^ 1; }
+
+	static constexpr state make_write(state marker) { return marker ^ 0b10; }
+	static constexpr state make_read(state marker) { return marker | 0b10; }
+
 	struct alignas(8) header {
-		std::atomic_bool operation_active;
 		std::atomic<handle_id> active_handle_id;
+		std::atomic<state> state;
 		std::atomic_uint16_t curr_index;
 	};
 	static_assert(sizeof(header) == 8);
@@ -50,10 +60,16 @@ private:
 		return SIZE / blocks_per_window() / cells_per_block();
 	}
 
+	// TODO: Stupid positioning, needs access to window_count().
+	template <bool is_write>
+	static constexpr state make_state(size_t window) {
+		return static_cast<state>((window / window_count()) << 2) | (is_write << 1);
+	}
+
 	std::unique_ptr<window[]> buffer = std::make_unique<window[]>(window_count());
 	
-	std::atomic_uint64_t read_window = 1;
-	std::atomic_uint64_t write_window = 2;
+	std::atomic_uint64_t read_window = 0;
+	std::atomic_uint64_t write_window = 1;
 
 	window& get_read_window() { return buffer[read_window % window_count()]; }
 	window& get_write_window() { return buffer[write_window % window_count()]; }
@@ -76,13 +92,26 @@ public:
 		relaxed_fifo& fifo;
 
 		handle_id id;
+
+		// Doing it like this allows the push code to grab a new block instead of requiring special cases for first-time initialization.
+		// An already active block will always trigger a check.
+		static inline block dummy_block{header{0, make_active(0)}};
 	
-		block* read_block;
-		block* write_block;
+		block* read_block = &dummy_block;
+		block* write_block = &dummy_block;
 
-		uint64_t current_window = 0;
+		uint64_t write_window;
+		uint64_t read_window;
 
-		handle(relaxed_fifo& fifo) : fifo(fifo), id(fifo.get_handle_id()) { }
+		// These represent an inactive occupation of the current epoch.
+		state write_occ;
+		state read_occ;
+
+		handle(relaxed_fifo& fifo) : fifo(fifo), id(fifo.get_handle_id()) {
+			write_window = fifo.write_window;
+			write_occ = make_state<true>(write_window);
+			read_occ = make_state<false>(write_window);
+		}
 
 		friend relaxed_fifo;
 
@@ -103,7 +132,8 @@ public:
 			return std::numeric_limits<size_t>::max();
 		}
 
-		void claim_new_block(header* header) {
+		// Postcondition (on true return): A valid block in the active window is claimed and correctly marked as occupied.
+		bool claim_new_block() {
 			while (true) {
 				fifo.write_currently_claiming++;
 				if (fifo.write_wants_move) {
@@ -112,12 +142,9 @@ public:
 					break;
 				}
 				// Wait until moving finished.
-				while (fifo.write_wants_move) { }
-			}
-
-			if (header) {
-				// TODO: Is this ok? Could this initiate a window move WITHOUT checking for write_wants_move?
-				header->operation_active = false;
+				while (fifo.write_wants_move) {
+					// TODO: Maybe something better than busy waiting?
+				}
 			}
 
 			size_t free_bit;
@@ -129,12 +156,15 @@ public:
 						// We're now moving the window!
 						// Wait until no more new blocks are being claimed.
 						while (fifo.write_currently_claiming > 1) { }
-						if (header) {
-							header->operation_active = false;
-						}
+						auto expected = write_occ;
+						auto write = make_read(expected);
 						for (block& block : fifo.get_write_window().blocks) {
 							// Busy wait until operation concludes.
-							while (block.header.operation_active) { }
+							while (!block.header.state.compare_exchange_weak(expected, write)) {
+								// If something besides activity is incorrect here we're in trouble!
+								assert(expected == make_active(write_occ));
+								expected = write_occ;
+							}
 							// Clean up header.
 							block.header.active_handle_id = 0;
 						}
@@ -142,76 +172,74 @@ public:
 						if ((new_window - fifo.read_window) % window_count() != 0) {
 							fifo.write_window = new_window;
 						} else {
-							// TODO: We can't move!
-							throw 2;
+							// TODO: Deal better with an almost full queue? Each push will try to move the window unsuccessfully.
+							fifo.write_wants_move = false;
+							fifo.write_currently_claiming--;
+							return false;
 						}
 						// Reset values for loop.
-						header = nullptr; // We don't have a header now because the window just moved and we need a new block from the new window!
 						free_bit = get_free_bit(fifo.get_write_window().occupied_set);
 						fifo.write_wants_move = false;
 					} else {
 						// Someone else is already moving the window, we give up the block and wait until they're done.
-						if (header) {
-							header->operation_active = false;
-						}
 						fifo.write_currently_claiming--;
-						claim_new_block(header);
-						return;
+						// TODO: Get rid of recursion.
+						return claim_new_block();
 					}
 				}
 			} while (!fifo.get_write_window().occupied_set.set(free_bit));
-			current_window = fifo.write_window;
-			write_block = &fifo.buffer[current_window % window_count()].blocks[free_bit];
+			write_window = fifo.write_window;
+			write_occ = make_state<true>(write_window);
+			write_block = &fifo.get_write_window().blocks[free_bit];
 			// TODO: Consider what could happen between claiming the block via the occupied set and setting the id here (if stealing was possible).
-			header = &write_block->header;
+			auto& header = write_block->header;
 			// The order here is important, we first set the state to active, then decrease the claim counter, otherwise a new window switch might occur inbetween.
-			header->operation_active = true;
-			header->active_handle_id = id; // TODO: Maybe CAS to detect stealing or sth? TODO Writers don't ever use this!
+			header.state = make_active(write_occ);
+			header.active_handle_id = id; // TODO: Maybe CAS to detect stealing or sth? TODO Writers don't ever use this!
 			fifo.write_currently_claiming--;
+			return true;
 		}
 
 	public:
 		bool push(T t) {
-push_start:
 			// if (write_block->header.active_handle_id != id) { /* ... */ }
 			// Push blocks can currently not be stolen.
-
-			if (current_window != fifo.write_window) {
-				// The window moved!
-				claim_new_block(nullptr);
-			}
-
-			if (fifo.write_wants_move) {
-				while (fifo.write_wants_move) {
-					// TODO: Maybe something better than busy waiting?
-				}
-				claim_new_block(nullptr);
-			}
-
+			
 			header* header = &write_block->header;
-			// TODO: Can we even do this? Between the check and the write the window could've moved and the read window moved onto this one.
-			// Possible solution: operation_active gets an epoch counter with which we can CAS.
-			header->operation_active = true;
+			auto expected = write_occ;
+			if (!header->state.compare_exchange_strong(expected, make_active(expected))) {
+				// Something happened, we get a new block!
+				header->state = write_occ;
+				if (!claim_new_block()) {
+					return false;
+				}
+				header = &write_block->header;
+				goto ready_to_move;
+			}
 
-			// It changed between the last check and now, we need to let the window move progress because it might've missed we're busy!
-			// TODO: What could be a possibility here is the window moving, then the read window moving onto this one and the block being claimed?
-			// (All between the set and this check)
 			if (fifo.write_wants_move) {
-				header->operation_active = false;
-				return push(std::move(t));
+				header->state = write_occ; // Back to inactive.
+				// When claiming we get caught into a busy loop anyways. But is that preferable?
+				if (!claim_new_block()) {
+					return false;
+				}
+				header = &write_block->header;
 			}
 
-			if (current_window != fifo.write_window) {
-				goto push_start;
-			}
-
+ready_to_move:
 			if (header->curr_index >= cells_per_block()) {
-				claim_new_block(header);
+				// TODO: Make sure this is ok. We might only want to do this after entering into write_currently_claiming.
+				// (This was previously the case, where the header was passed into the claim_new_block method).
+				header->state = write_occ;
+				if (!claim_new_block()) {
+					return false;
+				}
 				header = &write_block->header;
 			}
 
 			write_block->cells[header->curr_index++] = std::move(t);
 			
+			header->state = write_occ;
 			return true;
 		}
 

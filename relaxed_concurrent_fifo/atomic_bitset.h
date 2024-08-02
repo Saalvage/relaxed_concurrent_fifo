@@ -39,6 +39,7 @@ class atomic_bitset {
 private:
     using internal_type = typename min_fit_int<N>::type;
 
+    // TODO: Is it preferable to always have an array of bytes since it gives greater granularity to the atomics?
     std::conditional_t<N <= 64, std::atomic<internal_type>, std::array<std::atomic<uint8_t>, N / 8 + (N % 8 ? 1 : 0)>> data;
 
     static constexpr bool uses_array = N > 64;
