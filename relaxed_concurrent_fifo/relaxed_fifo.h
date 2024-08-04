@@ -220,18 +220,10 @@ public:
 		bool push(T t) {
 			header* header = &write_block->header;
 			auto expected = write_occ;
-			if (!header->state.compare_exchange_strong(expected, make_active(expected)) || fifo.write_wants_move) {
-				// Something happened or someone wants to move the window, we get a new block!
-				header->state = write_occ;
-				if (!claim_new_block()) {
-					return false;
-				}
-				header = &write_block->header;
-			}
-
-			if (header->curr_index >= cells_per_block()) {
-				// TODO: Make sure this is ok. We might only want to do this after entering into write_currently_claiming.
-				// (This was previously the case, where the header was passed into the claim_new_block method).
+			if (!header->state.compare_exchange_strong(expected, make_active(expected))
+				|| fifo.write_wants_move
+				|| header->curr_index >= cells_per_block()) {
+				// Something happened, someone wants to move the window or our block is full, we get a new block!
 				header->state = write_occ;
 				if (!claim_new_block()) {
 					return false;
