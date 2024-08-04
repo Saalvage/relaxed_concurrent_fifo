@@ -224,7 +224,11 @@ public:
 				|| fifo.write_wants_move
 				|| header->curr_index >= cells_per_block()) {
 				// Something happened, someone wants to move the window or our block is full, we get a new block!
-				header->state = write_occ;
+				if (expected == write_occ) {
+					// We only reset the header state if the CAS succeeded (we managed to claim the block).
+					// TODO: Preferable to split the method again?
+					header->state = write_occ;
+				}
 				if (!claim_new_block()) {
 					return false;
 				}
