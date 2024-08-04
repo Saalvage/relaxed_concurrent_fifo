@@ -18,8 +18,8 @@ struct min_fit_int {
 
 template <bool SET, typename T>
 constexpr bool set_bit_atomic(std::atomic<T>& data, size_t index) {
-    uint8_t old_val;
-    uint8_t new_val;
+    T old_val;
+    T new_val;
     do {
         old_val = data;
         if constexpr (SET) {

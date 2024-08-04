@@ -121,11 +121,11 @@ public:
 		std::uniform_int_distribution<size_t> dist{0, blocks_per_window() - 1};
 
 		// TODO: Simply continuously set bits from a given starting point?
-		size_t get_free_bit(const atomic_bitset<blocks_per_window()>& bits) {
+		size_t claim_free_bit(const atomic_bitset<blocks_per_window()>& bits) {
 			auto off = dist(rng);
 			for (size_t i = 0; i < bits.size(); i++) {
 				auto idx = (i + off) % bits.size();
-				if (!bits[idx]) {
+				if (bits.set(idx)) {
 					return idx;
 				}
 			}
@@ -147,47 +147,45 @@ public:
 				}
 			}
 
-			size_t free_bit;
-			do {
-				free_bit = get_free_bit(fifo.get_write_window().occupied_set);
-				if (free_bit == std::numeric_limits<size_t>::max()) {
-					bool expected = false;
-					if (fifo.write_wants_move.compare_exchange_strong(expected, true)) {
-						// We're now moving the window!
-						// Wait until no more new blocks are being claimed.
-						while (fifo.write_currently_claiming > 1) { }
-						auto expected = write_occ;
-						auto write = make_read(expected);
-						for (block& block : fifo.get_write_window().blocks) {
-							// Busy wait until operation concludes.
-							while (!block.header.state.compare_exchange_weak(expected, write)) {
-								// If something besides activity is incorrect here we're in trouble!
-								assert(expected == make_active(write_occ));
-								expected = write_occ;
-							}
-							// Clean up header.
-							block.header.active_handle_id = 0;
+			size_t free_bit = claim_free_bit(fifo.get_write_window().occupied_set);
+			// This can be a if instead of a while because we are guaranteed to claim a free bit in a new window (at least when writing).
+			if (free_bit == std::numeric_limits<size_t>::max()) {
+				bool expected = false;
+				if (fifo.write_wants_move.compare_exchange_strong(expected, true)) {
+					// We're now moving the window!
+					// Wait until no more new blocks are being claimed.
+					while (fifo.write_currently_claiming > 1) { }
+					auto expected = write_occ;
+					auto write = make_read(expected);
+					for (block& block : fifo.get_write_window().blocks) {
+						// Busy wait until operation concludes.
+						while (!block.header.state.compare_exchange_weak(expected, write)) {
+							// If something besides activity is incorrect here we're in trouble!
+							assert(expected == make_active(write_occ));
+							expected = write_occ;
 						}
-						auto new_window = fifo.write_window + 1;
-						if ((new_window - fifo.read_window) % window_count() != 0) {
-							fifo.write_window = new_window;
-						} else {
-							// TODO: Deal better with an almost full queue? Each push will try to move the window unsuccessfully.
-							fifo.write_wants_move = false;
-							fifo.write_currently_claiming--;
-							return false;
-						}
-						// Reset values for loop.
-						free_bit = get_free_bit(fifo.get_write_window().occupied_set);
-						fifo.write_wants_move = false;
-					} else {
-						// Someone else is already moving the window, we give up the block and wait until they're done.
-						fifo.write_currently_claiming--;
-						// TODO: Get rid of recursion.
-						return claim_new_block();
+						// Clean up header.
+						block.header.active_handle_id = 0;
 					}
+					auto new_window = fifo.write_window + 1;
+					if ((new_window - fifo.read_window) % window_count() != 0) {
+						fifo.write_window = new_window;
+					} else {
+						// TODO: Deal better with an almost full queue? Each push will try to move the window unsuccessfully.
+						fifo.write_wants_move = false;
+						fifo.write_currently_claiming--;
+						return false;
+					}
+					// Claim a new block, we're the only one able to at this point so we can be sure that we get one.
+					free_bit = claim_free_bit(fifo.get_write_window().occupied_set);
+					fifo.write_wants_move = false;
+				} else {
+					// Someone else is already moving the window, we give up the block and wait until they're done.
+					fifo.write_currently_claiming--;
+					// TODO: Get rid of recursion.
+					return claim_new_block();
 				}
-			} while (!fifo.get_write_window().occupied_set.set(free_bit));
+			}
 			write_window = fifo.write_window;
 			write_occ = make_state<true>(write_window);
 			write_block = &fifo.get_write_window().blocks[free_bit];
