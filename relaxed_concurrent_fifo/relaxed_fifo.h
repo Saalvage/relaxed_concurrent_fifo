@@ -121,7 +121,7 @@ public:
 		std::uniform_int_distribution<size_t> dist{0, blocks_per_window() - 1};
 
 		// TODO: Simply continuously set bits from a given starting point?
-		size_t claim_free_bit(const atomic_bitset<blocks_per_window()>& bits) {
+		size_t claim_free_bit(atomic_bitset<blocks_per_window()>& bits) {
 			auto off = dist(rng);
 			for (size_t i = 0; i < bits.size(); i++) {
 				auto idx = (i + off) % bits.size();
