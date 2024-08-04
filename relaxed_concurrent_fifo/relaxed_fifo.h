@@ -218,31 +218,17 @@ public:
 
 	public:
 		bool push(T t) {
-			// if (write_block->header.active_handle_id != id) { /* ... */ }
-			// Push blocks can currently not be stolen.
-			
 			header* header = &write_block->header;
 			auto expected = write_occ;
-			if (!header->state.compare_exchange_strong(expected, make_active(expected))) {
-				// Something happened, we get a new block!
+			if (!header->state.compare_exchange_strong(expected, make_active(expected)) || fifo.write_wants_move) {
+				// Something happened or someone wants to move the window, we get a new block!
 				header->state = write_occ;
 				if (!claim_new_block()) {
 					return false;
 				}
 				header = &write_block->header;
-				goto ready_to_move;
 			}
 
-			if (fifo.write_wants_move) {
-				header->state = write_occ; // Back to inactive.
-				// When claiming we get caught into a busy loop anyways. But is that preferable?
-				if (!claim_new_block()) {
-					return false;
-				}
-				header = &write_block->header;
-			}
-
-ready_to_move:
 			if (header->curr_index >= cells_per_block()) {
 				// TODO: Make sure this is ok. We might only want to do this after entering into write_currently_claiming.
 				// (This was previously the case, where the header was passed into the claim_new_block method).
