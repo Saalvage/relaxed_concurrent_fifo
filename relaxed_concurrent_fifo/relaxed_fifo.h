@@ -209,13 +209,18 @@ public:
 		}
 
 		template <bool is_write>
-		move_window_result move_window() {
-			return move_window_int<is_write, is_write ? &relaxed_fifo::write_currently_claiming : &relaxed_fifo::read_currently_claiming,
-				is_write ? &relaxed_fifo::write_wants_move : &relaxed_fifo::read_wants_move,
-				is_write ? &relaxed_fifo::write_window : &relaxed_fifo::read_window,
-				is_write ? &relaxed_fifo::read_window : &relaxed_fifo::write_window,
-				is_write ? &handle::write_occ : &handle::read_occ,
-				is_write ? &relaxed_fifo::get_write_window : &relaxed_fifo::get_read_window>();
+		move_window_result move_window();
+
+		template <>
+		move_window_result move_window<true>() {
+			return move_window_int<true, &relaxed_fifo::write_currently_claiming, &relaxed_fifo::write_wants_move,
+				&relaxed_fifo::write_window, &relaxed_fifo::read_window, &handle::write_occ, &relaxed_fifo::get_write_window>();
+		}
+
+		template <>
+		move_window_result move_window<false>() {
+			return move_window_int<false, &relaxed_fifo::read_currently_claiming, &relaxed_fifo::read_wants_move,
+				&relaxed_fifo::read_window, &relaxed_fifo::write_window, &handle::read_occ, &relaxed_fifo::get_read_window>();
 		}
 
 		// Postcondition (on true return): A valid block in the active window is claimed and correctly marked as occupied.
