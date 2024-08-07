@@ -111,7 +111,7 @@ public:
 			write_window = fifo.write_window;
 			read_window = fifo.read_window;
 			write_occ = make_state<true>(write_window);
-			read_occ = make_state<false>(write_window);
+			read_occ = make_state<false>(read_window);
 		}
 
 		friend relaxed_fifo;
