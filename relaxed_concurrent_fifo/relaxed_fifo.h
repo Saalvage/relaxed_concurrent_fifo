@@ -217,64 +217,84 @@ public:
 		}
 
 		// Postcondition (on true return): A valid block in the active window is claimed and correctly marked as occupied.
-		template <bool is_write, std::atomic_uint8_t relaxed_fifo::*currently_claiming, std::atomic_bool relaxed_fifo::*wants_move,
-			uint64_t handle::*handle_window, std::atomic_uint64_t relaxed_fifo::*fifo_window, state handle::*occupation, block* handle::*block,
-			window& (relaxed_fifo::*get_window)()>
-		bool claim_new_block_int() {
-			claim_currently_claiming<currently_claiming, wants_move>();
+		bool claim_new_block_write() {
+			claim_currently_claiming<&relaxed_fifo::write_currently_claiming, &relaxed_fifo::write_wants_move>();
 
-			size_t free_bit = claim_free_bit<is_write>((fifo.*get_window)().occupied_set);
+			size_t free_bit = claim_free_bit<true>(fifo.get_write_window().occupied_set);
 			// This can be a if instead of a while because we are guaranteed to claim a free bit in a new window (at least when writing).
 			if (free_bit == std::numeric_limits<size_t>::max()) {
-				switch (move_window<is_write>()) {
+				switch (move_window<true>()) {
 				case move_window_result::other_is_moving:
 					// Someone else is already moving the window, we give up the block and wait until they're done.
-					(fifo.*currently_claiming)--;
+					fifo.write_currently_claiming--;
 					// TODO: Get rid of recursion.
-					return claim_new_block<is_write>();
+					return claim_new_block_write();
 				case move_window_result::failure:
 					// TODO: Deal better with an almost full queue? Each push will try to move the window unsuccessfully.
-					fifo.*wants_move = false;
-					(fifo.*currently_claiming)--;
+					fifo.write_wants_move = false;
+					fifo.write_currently_claiming--;
 					return false;
 				case move_window_result::moved_by_me:
 					// Claim a new block, we're the only one able to at this point so we can be sure that we get one.
-					free_bit = claim_free_bit<is_write>((fifo.*get_window)().occupied_set);
-					fifo.*wants_move = false;
-					if constexpr (is_write) {
-						assert(free_bit != std::numeric_limits<size_t>::max());
-					} else {
-						// No writes happened in windows.
-						// This theoretically shouldn't happen but handling this case shouldn't hurt.
-						if (free_bit == std::numeric_limits<size_t>::max()) {
-							(fifo.*currently_claiming)--;
-							return false;
-						}
+					free_bit = claim_free_bit<true>(fifo.get_write_window().occupied_set);
+					fifo.write_wants_move = false;
+					assert(free_bit != std::numeric_limits<size_t>::max());
+					break;
+				}
+			}
+			write_window = fifo.write_window;
+			write_occ = make_state<true>(write_window);
+			write_block = &fifo.get_write_window().blocks[free_bit];
+			// TODO: Consider what could happen between claiming the block via the occupied set and setting the id here (if stealing was possible).
+			auto& header = write_block->header;
+			// The order here is important, we first set the state to active, then decrease the claim counter, otherwise a new window switch might occur inbetween.
+			header.state = make_active(write_occ);
+			header.active_handle_id = id; // TODO: Maybe CAS to detect stealing or sth? TODO Writers don't ever use this!
+			fifo.write_currently_claiming--;
+			return true;
+		}
+
+		// Postcondition (on true return): A valid block in the active window is claimed and correctly marked as occupied.
+		bool claim_new_block_read() {
+			claim_currently_claiming<&relaxed_fifo::read_currently_claiming, &relaxed_fifo::read_wants_move>();
+
+			size_t free_bit = claim_free_bit<false>(fifo.get_read_window().occupied_set);
+			// This can be a if instead of a while because we are guaranteed to claim a free bit in a new window (at least when writing).
+			if (free_bit == std::numeric_limits<size_t>::max()) {
+				switch (move_window<false>()) {
+				case move_window_result::other_is_moving:
+					// Someone else is already moving the window, we give up the block and wait until they're done.
+					fifo.read_currently_claiming--;
+					// TODO: Get rid of recursion.
+					return claim_new_block_read();
+				case move_window_result::failure:
+					// TODO: Deal better with an almost full queue? Each push will try to move the window unsuccessfully.
+					fifo.read_wants_move = false;
+					fifo.read_currently_claiming--;
+					return false;
+				case move_window_result::moved_by_me:
+					// Claim a new block, we're the only one able to at this point so we can be sure that we get one.
+					free_bit = claim_free_bit<false>(fifo.get_read_window().occupied_set);
+					fifo.read_wants_move = false;
+					// No write happened in this window.
+					// This theoretically shouldn't happen but handling this case shouldn't hurt.
+					if (free_bit == std::numeric_limits<size_t>::max()) {
+						fifo.read_currently_claiming--;
+						return false;
 					}
 					break;
 				}
 			}
-			this->*handle_window = fifo.*fifo_window;
-			this->*occupation = make_state<is_write>(this->*handle_window);
-			this->*block = &(fifo.*get_window)().blocks[free_bit];
+			read_window = fifo.read_window;
+			read_occ = make_state<true>(read_window);
+			read_block = &fifo.get_read_window().blocks[free_bit];
 			// TODO: Consider what could happen between claiming the block via the occupied set and setting the id here (if stealing was possible).
-			auto& header = (this->*block)->header;
+			auto& header = read_block->header;
 			// The order here is important, we first set the state to active, then decrease the claim counter, otherwise a new window switch might occur inbetween.
-			header.state = make_active(this->*occupation);
-			header.active_handle_id = id; // TODO: Maybe CAS to detect stealing or sth? TODO Writers don't ever use this!
-			(fifo.*currently_claiming)--;
+			header.state = make_active(read_occ);
+			header.active_handle_id = id; // TODO: Maybe CAS to detect stealing or sth? TODO readrs don't ever use this!
+			fifo.read_currently_claiming--;
 			return true;
-		}
-
-		template <bool is_write>
-		bool claim_new_block() {
-			return claim_new_block_int<is_write, is_write ? &relaxed_fifo::write_currently_claiming : &relaxed_fifo::read_currently_claiming,
-				is_write ? &relaxed_fifo::write_wants_move : &relaxed_fifo::read_wants_move,
-				is_write ? &handle::write_window : &handle::read_window,
-				is_write ? &relaxed_fifo::write_window : &relaxed_fifo::read_window,
-				is_write ? &handle::write_occ : &handle::read_occ,
-				is_write ? &handle::write_block : &handle::read_block,
-				is_write ? &relaxed_fifo::get_write_window : &relaxed_fifo::get_read_window>();
 		}
 
 	public:
@@ -290,7 +310,7 @@ public:
 					// TODO: Preferable to split the condition again?
 					header->state = write_occ;
 				}
-				if (!claim_new_block<true>()) {
+				if (!claim_new_block_write()) {
 					return false;
 				}
 				header = &write_block->header;
@@ -314,7 +334,7 @@ public:
 					// TODO: Preferable to split the method again?
 					header->state = read_occ;
 				}
-				if (!claim_new_block<false>()) {
+				if (!claim_new_block_read()) {
 					return std::nullopt;
 				}
 				header = &read_block->header;
