@@ -10,7 +10,8 @@
 
 #include "atomic_bitset.h"
 
-template <typename T, size_t SIZE>
+template <typename T, size_t SIZE, size_t CELLS_PER_BLOCK = std::hardware_constructive_interference_size / sizeof(T) - 1,
+	size_t BLOCKS_PER_WINDOW = 8>
 class relaxed_fifo {
 private:
 	using handle_id = uint8_t;
@@ -35,29 +36,21 @@ private:
 	};
 	static_assert(sizeof(header) == 8);
 
-	static constexpr size_t cells_per_block() {
-		return std::hardware_constructive_interference_size / sizeof(T) - 1;
-	}
-
 	struct block {
 		header header;
-		std::array<std::atomic<T>, cells_per_block()> cells;
+		std::array<std::atomic<T>, CELLS_PER_BLOCK> cells;
 	};
-	static_assert(sizeof(block) == cells_per_block() * sizeof(T) + sizeof(header));
+	static_assert(sizeof(block) == CELLS_PER_BLOCK * sizeof(T) + sizeof(header));
 	static_assert(sizeof(block) >= std::hardware_destructive_interference_size);
 	static_assert(sizeof(block) <= std::hardware_constructive_interference_size);
 
-	static constexpr size_t blocks_per_window() {
-		return 8;
-	}
-
 	struct window {
-		atomic_bitset<blocks_per_window()> occupied_set;
-		block blocks[blocks_per_window()];
+		atomic_bitset<BLOCKS_PER_WINDOW> occupied_set;
+		block blocks[BLOCKS_PER_WINDOW];
 	};
 
 	static constexpr size_t window_count() {
-		return SIZE / blocks_per_window() / cells_per_block();
+		return SIZE / BLOCKS_PER_WINDOW / CELLS_PER_BLOCK;
 	}
 
 	// TODO: Stupid positioning, needs access to window_count().
@@ -119,10 +112,10 @@ public:
 		std::random_device dev;
 		std::mt19937 rng{dev()};
 		// TODO: Check template parameter here.
-		std::uniform_int_distribution<size_t> dist{0, blocks_per_window() - 1};
+		std::uniform_int_distribution<size_t> dist{0, BLOCKS_PER_WINDOW - 1};
 
 		template <bool is_write>
-		size_t claim_free_bit(atomic_bitset<blocks_per_window()>& bits) {
+		size_t claim_free_bit(atomic_bitset<BLOCKS_PER_WINDOW>& bits) {
 			auto off = dist(rng);
 			for (size_t i = 0; i < bits.size(); i++) {
 				auto idx = (i + off) % bits.size();
@@ -251,6 +244,8 @@ public:
 					if constexpr (is_write) {
 						assert(free_bit != std::numeric_limits<size_t>::max());
 					} else {
+						// No writes happened in windows.
+						// This theoretically shouldn't happen but handling this case shouldn't hurt.
 						if (free_bit == std::numeric_limits<size_t>::max()) {
 							(fifo.*currently_claiming)--;
 							return false;
@@ -288,7 +283,7 @@ public:
 			auto expected = write_occ;
 			if (!header->state.compare_exchange_strong(expected, make_active(expected))
 				|| fifo.write_wants_move
-				|| header->curr_index >= cells_per_block()) {
+				|| header->curr_index >= CELLS_PER_BLOCK) {
 				// Something happened, someone wants to move the window or our block is full, we get a new block!
 				if (expected == write_occ) {
 					// We only reset the header state if the CAS succeeded (we managed to claim the block).
