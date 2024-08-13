@@ -79,14 +79,26 @@ public:
         assert(index < size());
         if constexpr (uses_array) {
             return data[index / 8].load(order) & (1 << (index % 8));
-        }
-        else if constexpr (!uses_array) {
+        } else if constexpr (!uses_array) {
             return data.load(order) & (1 << index);
         }
     }
 
     constexpr bool operator[](size_t index) const {
         return test(index);
+    }
+
+    constexpr bool any() const {
+        if constexpr (uses_array) {
+            for (auto& elem : data) {
+                if (elem) {
+                    return true;
+                }
+            }
+            return false;
+        } else {
+            return data;
+        }
     }
 };
 
