@@ -23,9 +23,9 @@ constexpr bool set_bit_atomic(std::atomic<T>& data, size_t index) {
     do {
         old_val = data;
         if constexpr (SET) {
-            new_val = old_val | (1 << index);
+            new_val = old_val | (1ull << index);
         } else {
-            new_val = old_val & ~(1 << index);
+            new_val = old_val & ~(1ull << index);
         }
         if (old_val == new_val) {
             return false;
@@ -80,7 +80,7 @@ public:
         if constexpr (uses_array) {
             return data[index / 8].load(order) & (1 << (index % 8));
         } else if constexpr (!uses_array) {
-            return data.load(order) & (1 << index);
+            return data.load(order) & (1ull << index);
         }
     }
 

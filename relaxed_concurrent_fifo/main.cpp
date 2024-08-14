@@ -79,7 +79,7 @@ int main() {
 	static constexpr int TEST_TIME_SECONDS = 10;
 	static constexpr int TEST_ITERATIONS = 1;
 	static constexpr int PROCESSOR_COUNTS[] = {1, 2, 4, 8, 16};
-	std::unique_ptr<benchmark_base> instances[] = {std::make_unique<benchmark<lock_fifo>>("lock"), std::make_unique<benchmark<concurrent_fifo>>("concurrent")};
+	std::unique_ptr<benchmark_base> instances[] = {std::make_unique<benchmark_relaxed>("relaxed"), std::make_unique<benchmark<lock_fifo<uint64_t>>>("lock"), std::make_unique<benchmark<concurrent_fifo<uint64_t>>>("concurrent")};
 
 	std::cout << "Expected running time: " << sizeof(PREFILL_AMOUNTS) / sizeof(*PREFILL_AMOUNTS) * TEST_ITERATIONS * TEST_TIME_SECONDS * sizeof(PROCESSOR_COUNTS) / sizeof(*PROCESSOR_COUNTS) * sizeof(instances) / sizeof(*instances) << " seconds" << std::endl;
 	for (auto prefill : PREFILL_AMOUNTS) {

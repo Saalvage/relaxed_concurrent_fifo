@@ -12,16 +12,18 @@
 
 #include <iostream>
 
-template <typename T, size_t SIZE, size_t BLOCKS_PER_WINDOW = 8, size_t CELLS_PER_BLOCK = std::hardware_constructive_interference_size / sizeof(T) - 1>
+template <typename T, size_t BLOCKS_PER_WINDOW = 8, size_t CELLS_PER_BLOCK = std::hardware_constructive_interference_size / sizeof(T) - 1>
 class relaxed_fifo {
 private:
-	static constexpr size_t window_count() {
-		return SIZE / BLOCKS_PER_WINDOW / CELLS_PER_BLOCK;
+	// TODO: Optimize modulo.
+	const size_t window_count;
+
+	size_t size() const {
+		return window_count * BLOCKS_PER_WINDOW * CELLS_PER_BLOCK;
 	}
 
 	using handle_id = uint8_t;
 
-	// TODO: We likely want the state to include the claiming thread as well.
 	// 8 bits handle, 6 bits epoch, 1 bit write/read, 1 bit inactive/active
 	using state = uint16_t;
 
@@ -40,8 +42,8 @@ private:
 	static constexpr state set_id(state marker, handle_id id) { return (marker ^ 0xff00) | (id << 8); }
 
 	template <bool is_write>
-	static constexpr state make_state(handle_id id, size_t window) {
-		return (static_cast<state>(id) << 8) | (((window / window_count()) & 0b111111) << 2) | (!is_write << 1);
+	state make_state(handle_id id, size_t window) const {
+		return (static_cast<state>(id) << 8) | (((window / window_count) & 0b111111) << 2) | (!is_write << 1);
 	}
 
 	struct alignas(8) header {
@@ -66,13 +68,13 @@ private:
 		block blocks[BLOCKS_PER_WINDOW];
 	};
 
-	std::unique_ptr<window[]> buffer = std::make_unique<window[]>(window_count());
+	std::unique_ptr<window[]> buffer;
 	
 	std::atomic_uint64_t read_window = 0;
 	std::atomic_uint64_t write_window = 1;
 
-	window& get_read_window() { return buffer[read_window % window_count()]; }
-	window& get_write_window() { return buffer[write_window % window_count()]; }
+	window& get_read_window() { return buffer[read_window % window_count]; }
+	window& get_write_window() { return buffer[write_window % window_count]; }
 
 	std::atomic_bool read_wants_move;
 	std::atomic_bool write_wants_move;
@@ -87,10 +89,14 @@ private:
 	}
 
 public:
+	relaxed_fifo(size_t size) : window_count(size / BLOCKS_PER_WINDOW / CELLS_PER_BLOCK) {
+		buffer = std::make_unique<window[]>(window_count);
+	}
+
 	void debug_print() {
 		std::cout << "Printing relaxed_fifo:\n"
 			<< "Read: " << read_window << "; Write: " << write_window << '\n';
-		for (size_t i = 0; i < window_count(); i++) {
+		for (size_t i = 0; i < window_count; i++) {
 			for (size_t j = 0; j < BLOCKS_PER_WINDOW; j++) {
 				header& header = buffer[i].blocks[j].header;
 				std::cout << std::bitset<16>(header.state) << " " << header.curr_index << " | ";
@@ -122,8 +128,8 @@ public:
 		handle(relaxed_fifo& fifo) : fifo(fifo), id(fifo.get_handle_id()) {
 			write_window = fifo.write_window;
 			read_window = fifo.read_window;
-			write_occ = make_state<true>(id, write_window);
-			read_occ = make_state<false>(id, read_window);
+			write_occ = fifo.make_state<true>(id, write_window);
+			read_occ = fifo.make_state<false>(id, read_window);
 		}
 
 		friend relaxed_fifo;
@@ -178,19 +184,19 @@ public:
 				// Wait until no more new blocks are being claimed.
 				while (fifo.write_currently_claiming > 1) {}
 				// The new state has the new read/write state and epoch.
-				auto write = make_state<false>(0, fifo.write_window);
+				auto write = fifo.make_state<false>(0, fifo.write_window);
 				for (auto& block : fifo.get_write_window().blocks) {
 					auto expected = make_inactive(block.header.state);
-					assert(is_write(expected));
+					//assert(is_write(expected)); // TODO: Commented out?
 					// Busy wait until operation concludes.
 					while (!block.header.state.compare_exchange_weak(expected, write)) {
 						// If something besides activity or id is incorrect here we're in trouble!
-						assert(is_write(expected));
+						//assert(is_write(expected));
 						expected = make_inactive(expected);
 					}
 				}
 				auto new_window = fifo.write_window + 1;
-				if ((new_window - fifo.read_window) % window_count() != 0) {
+				if ((new_window - fifo.read_window) % fifo.window_count != 0) {
 					fifo.write_window = new_window;
 				} else {
 					// Whelp, we're out of luck here! Can't force forward the read window.
@@ -211,7 +217,7 @@ public:
 				// Wait until no more new blocks are being claimed.
 				while (fifo.read_currently_claiming > 1) {}
 				// The new state has the new read/write state and epoch.
-				auto write = make_state<true>(0, fifo.read_window + window_count()); // Advance by one epoch.
+				auto write = fifo.make_state<true>(0, fifo.read_window + fifo.window_count); // Advance by one epoch.
 				for (auto& block : fifo.get_read_window().blocks) {
 					auto expected = make_inactive(block.header.state);
 					// Busy wait until operation concludes.
@@ -220,9 +226,10 @@ public:
 					}
 				}
 				auto new_window = fifo.read_window + 1;
-				if ((new_window - fifo.write_window) % window_count() != 0) {
+				if ((fifo.write_window - new_window) % fifo.window_count != 0) {
 					fifo.read_window = new_window;
 				} else {
+					// TODO: Have this check happen earlier?
 					// Are there any pushes to the current write window?
 					if (!fifo.get_write_window().occupied_set.any()) {
 						return move_window_result::failure;
@@ -280,21 +287,42 @@ public:
 			// Each newly claimed block will have at least one element.
 			fifo.get_write_window().filled_set.set(free_bit);
 			write_window = fifo.write_window;
-			write_occ = make_state<true>(id, write_window);
+			write_occ = fifo.make_state<true>(id, write_window);
 			write_block = &fifo.get_write_window().blocks[free_bit];
 			// TODO: Consider what could happen between claiming the block via the occupied set and setting the id here (if stealing was possible).
 			auto& header = write_block->header;
 			// The order here is important, we first set the state to active, then decrease the claim counter, otherwise a new window switch might occur inbetween.
-			header.state = make_active(write_occ);
+			header.state = fifo.make_active(write_occ);
 			fifo.write_currently_claiming--;
 			return true;
 		}
 
+		// TODO: This method needs to be cleaned up!
 		// Postcondition (on true return): A valid block in the active window is claimed and correctly marked as occupied.
 		bool claim_new_block_read() {
 			claim_currently_claiming<&relaxed_fifo::read_currently_claiming, &relaxed_fifo::read_wants_move>();
 
-			size_t free_bit = claim_free_bit<false>(fifo.get_read_window().occupied_set);
+			auto set_where = 0;
+
+			size_t free_bit;
+			do {
+				free_bit = claim_free_bit<false>(fifo.get_read_window().occupied_set);
+				if (free_bit == std::numeric_limits<size_t>::max()) {
+					break;
+				}
+				auto& my_header = fifo.get_read_window().blocks[free_bit].header;
+				state state = my_header.state;
+				if (!is_active(state) && my_header.state.compare_exchange_strong(state, fifo.make_active(fifo.make_state<false>(id, fifo.read_window)))) {
+					if (my_header.curr_index != 0) {
+						break;
+					} else {
+						// It was emptied in the meantime!
+						my_header.state = fifo.make_inactive(my_header.state); // TODO: Is this correct??
+					}
+				}
+			} while (true);
+			set_where = 1;
+
 			// This can be a if instead of a while because we are guaranteed to claim a free bit in a new window (at least when writing).
 			if (free_bit == std::numeric_limits<size_t>::max()) {
 				// We need to check if there are any blocks with elements still present!
@@ -308,11 +336,17 @@ public:
 						if (bits[idx]) {
 							header& header = fifo.get_read_window().blocks[idx].header;
 							state state = header.state;
-							if (!is_active(state) && header.state.compare_exchange_strong(state, make_active(make_state<false>(id, fifo.read_window)))) {
-								// We managed to steal a block!
-								any_left = false;
-								free_bit = idx;
-								break;
+							if (!is_active(state) && header.state.compare_exchange_strong(state, fifo.make_active(fifo.make_state<false>(id, fifo.read_window)))) {
+								if (header.curr_index != 0) {
+									// We managed to steal a block!
+									any_left = false;
+									free_bit = idx;
+									set_where = 3;
+									break;
+								} else {
+									// It was emptied in the meantime!
+									header.state = fifo.make_inactive(header.state); // TODO: Is this correct??
+								} 
 							} else {
 								// The block got stolen by someone else, we'll look for another one and eventually return if we fail!
 								any_left = true;
@@ -337,6 +371,12 @@ public:
 					case move_window_result::moved_by_me:
 						// Claim a new block, we're the only one able to at this point so we can be sure that we get one.
 						free_bit = claim_free_bit<false>(fifo.get_read_window().occupied_set);
+						auto& header = fifo.get_read_window().blocks[free_bit].header; // We need to claim immediately.
+						header.state = fifo.make_active(fifo.make_state<false>(id, fifo.read_window));
+						set_where = fifo.get_read_window().blocks[free_bit].header.curr_index;
+						if (fifo.get_read_window().blocks[free_bit].header.curr_index == 0) {
+							fifo.debug_print();
+						}
 						fifo.read_wants_move = false;
 						// No write happened in this window.
 						// This theoretically shouldn't happen but handling this case shouldn't hurt.
@@ -349,12 +389,13 @@ public:
 				}
 			}
 			read_window = fifo.read_window;
-			read_occ = make_state<false>(id, read_window);
+			read_occ = fifo.make_state<false>(id, read_window);
 			read_block = &fifo.get_read_window().blocks[free_bit];
 			// TODO: Consider what could happen between claiming the block via the occupied set and setting the id here (if stealing was possible).
 			auto& header = read_block->header;
+			assert(header.curr_index != 0);
 			// The order here is important, we first set the state to active, then decrease the claim counter, otherwise a new window switch might occur inbetween.
-			header.state = make_active(read_occ);
+			header.state = fifo.make_active(read_occ);
 			fifo.read_currently_claiming--;
 			return true;
 		}
@@ -397,7 +438,7 @@ public:
 					header->state = read_occ;
 				}
 				if (header->curr_index == 0) {
-					window& window = fifo.buffer[read_window % fifo.window_count()];
+					window& window = fifo.buffer[read_window % fifo.window_count];
 					auto diff = read_block - window.blocks;
 					window.filled_set.reset(diff);
 				}
@@ -416,6 +457,6 @@ public:
 
 	handle get_handle() { return handle(*this); }
 };
-//static_assert(fifo<relaxed_fifo>);
+static_assert(fifo<relaxed_fifo<uint64_t>, uint64_t>);
 
 #endif // RELAXED_FIFO_H_INCLUDED

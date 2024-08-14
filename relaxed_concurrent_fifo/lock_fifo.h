@@ -58,6 +58,6 @@ public:
 
 	handle get_handle() { return handle(this); }
 };
-static_assert(fifo<lock_fifo>);
+static_assert(fifo<lock_fifo<uint64_t>, uint64_t>);
 
 #endif // LOCK_FIFO_H_INCLUDED

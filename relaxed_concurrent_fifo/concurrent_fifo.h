@@ -82,6 +82,6 @@ public:
 
 	handle get_handle() { return handle(this); }
 };
-static_assert(fifo<concurrent_fifo>);
+static_assert(fifo<concurrent_fifo<uint64_t>, uint64_t>);
 
 #endif // CONCURRENT_FIFO_H_INCLUDED

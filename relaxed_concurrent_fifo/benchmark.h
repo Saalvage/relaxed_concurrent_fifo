@@ -14,37 +14,21 @@
 #include <future>
 #include <iostream>
 
+#include "relaxed_fifo.h"
+
 class benchmark_base {
 public:
 	virtual ~benchmark_base() = default;
 	virtual std::vector<size_t> test(size_t num_threads, size_t num_its, size_t test_time_seconds, double prefill_amount) const = 0;
 	virtual const std::string& get_name() const = 0;
-};
 
-template <template <typename> typename T> requires fifo<T>
-class benchmark : public benchmark_base {
-public:
-	benchmark(std::string name) : name(std::move(name)) { }
-
-	const std::string& get_name() const override {
-		return name;
-	}
-
-	std::vector<size_t> test(size_t num_threads, size_t num_its, size_t test_time_seconds, double prefill_amount) const override {
-		std::vector<size_t> results(num_its);
-		for (auto i : std::views::iota((size_t)0, num_its)) {
-			results[i] = test_single(num_threads, test_time_seconds, prefill_amount);
-		}
-		return results;
-	}
-
-private:
-	std::string name;
-
+protected:
+	template <typename T>
 	static size_t test_single(size_t num_threads, size_t test_time_seconds, double prefill_amount) {
-		T<size_t> fifo{1024};
+		T fifo{1024};
+		auto handle = fifo.get_handle();
 		for (size_t i = 0; i < prefill_amount * 1024; i++) {
-			fifo.push(i);
+			handle.push(i);
 		}
 		std::barrier a{ (ptrdiff_t)(num_threads + 1) };
 		std::atomic_bool over = false;
@@ -53,10 +37,11 @@ private:
 		for (size_t i = 0; i < num_threads; i++) {
 			threads[i] = std::jthread([&, i]() {
 				size_t its = 0;
+				auto handle = fifo.get_handle();
 				a.arrive_and_wait();
 				while (!over) {
-					fifo.push(5);
-					fifo.pop();
+					handle.push(5);
+					handle.pop();
 					its++;
 				}
 				results[i] = its;
@@ -79,6 +64,64 @@ private:
 
 		return std::reduce(results.begin(), results.end());
 	}
+};
+
+template <typename T>// requires fifo<T>
+class benchmark : public benchmark_base {
+public:
+	benchmark(std::string name) : name(std::move(name)) { }
+
+	const std::string& get_name() const override {
+		return name;
+	}
+
+	std::vector<size_t> test(size_t num_threads, size_t num_its, size_t test_time_seconds, double prefill_amount) const override {
+		std::vector<size_t> results(num_its);
+		for (auto i : std::views::iota((size_t)0, num_its)) {
+			results[i] = test_single<T>(num_threads, test_time_seconds, prefill_amount);
+		}
+		return results;
+	}
+
+private:
+	std::string name;
+};
+
+class benchmark_relaxed : public benchmark_base {
+	public:
+		benchmark_relaxed(std::string name) : name(std::move(name)) { }
+
+		const std::string& get_name() const override {
+			return name;
+		}
+
+		std::vector<size_t> test(size_t num_threads, size_t num_its, size_t test_time_seconds, double prefill_amount) const override {
+			std::vector<size_t> results(num_its);
+			for (auto i : std::views::iota((size_t)0, num_its)) {
+				results[i] = test_single_helper(num_threads, test_time_seconds, prefill_amount);
+			}
+			return results;
+		}
+
+	private:
+		std::string name;
+
+		static size_t test_single_helper(size_t num_threads, size_t test_time_seconds, double prefill_amount) {
+			switch (num_threads) {
+			case 1: return test_single<relaxed_fifo<size_t, 1>>(num_threads, test_time_seconds, prefill_amount);
+			case 2: return test_single<relaxed_fifo<size_t, 2>>(num_threads, test_time_seconds, prefill_amount);
+			case 4: return test_single<relaxed_fifo<size_t, 4>>(num_threads, test_time_seconds, prefill_amount);
+			case 8: return test_single<relaxed_fifo<size_t, 8>>(num_threads, test_time_seconds, prefill_amount);
+			case 16: return test_single<relaxed_fifo<size_t, 16>>(num_threads, test_time_seconds, prefill_amount);
+			case 32: return test_single<relaxed_fifo<size_t, 32>>(num_threads, test_time_seconds, prefill_amount);
+			case 64: return test_single<relaxed_fifo<size_t, 64>>(num_threads, test_time_seconds, prefill_amount);
+			case 128: return test_single<relaxed_fifo<size_t, 128>>(num_threads, test_time_seconds, prefill_amount);
+			case 256: return test_single<relaxed_fifo<size_t, 256>>(num_threads, test_time_seconds, prefill_amount);
+			case 512: return test_single<relaxed_fifo<size_t, 512>>(num_threads, test_time_seconds, prefill_amount);
+			case 1024: return test_single<relaxed_fifo<size_t, 1024>>(num_threads, test_time_seconds, prefill_amount);
+			default: throw std::runtime_error("Unsupported thread count!");
+			}
+		}
 };
 
 #endif // BENCHMARK_H_INCLUDED
