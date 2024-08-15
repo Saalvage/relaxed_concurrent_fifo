@@ -66,20 +66,23 @@ int main() {
 
 	constexpr const char* format = "fifo-data-{}-{:%FT%H-%M-%S}.csv";
 
-	static constexpr double PREFILL_AMOUNTS[] = {0, 0.5, 1};
+	static constexpr double PREFILL_AMOUNTS[] = {0.5};
 	static constexpr int TEST_TIME_SECONDS = 10;
-	static constexpr int TEST_ITERATIONS = 1;
-	static constexpr int PROCESSOR_COUNTS[] = {1, 2, 4, 8, 16};
+	static constexpr int TEST_ITERATIONS = 5;
+	std::vector<size_t> processor_counts;
+	for (size_t i = 1; i <= std::thread::hardware_concurrency(); i *= 2) {
+		processor_counts.emplace_back(i);
+	}
 	std::unique_ptr<benchmark_base> instances[] = {std::make_unique<benchmark_relaxed>("relaxed"), std::make_unique<benchmark<lock_fifo<uint64_t>>>("lock"), std::make_unique<benchmark<concurrent_fifo<uint64_t>>>("concurrent")};
 
-	std::cout << "Expected running time: " << sizeof(PREFILL_AMOUNTS) / sizeof(*PREFILL_AMOUNTS) * TEST_ITERATIONS * TEST_TIME_SECONDS * sizeof(PROCESSOR_COUNTS) / sizeof(*PROCESSOR_COUNTS) * sizeof(instances) / sizeof(*instances) << " seconds" << std::endl;
+	std::cout << "Expected running time: " << sizeof(PREFILL_AMOUNTS) / sizeof(*PREFILL_AMOUNTS) * TEST_ITERATIONS * TEST_TIME_SECONDS * processor_counts.size() * sizeof(instances) / sizeof(*instances) << " seconds" << std::endl;
 	for (auto prefill : PREFILL_AMOUNTS) {
 		std::cout << "Prefilling with " << prefill << std::endl;
 		std::ofstream file{std::format(format, prefill, std::chrono::round<std::chrono::seconds>(std::chrono::file_clock::now()))};
 		for (const auto& imp : instances) {
 			std::cout << "Testing " << imp->get_name() << std::endl;
 			//test_all<lock_fifo>();
-			for (auto i : PROCESSOR_COUNTS) {
+			for (auto i : processor_counts) {
 				std::cout << "With " << i << " processors" << std::endl;
 				for (auto res : imp->test(i, TEST_ITERATIONS, TEST_TIME_SECONDS, prefill)) {
 					file << imp->get_name() << "," << i << ',' << res << '\n';
