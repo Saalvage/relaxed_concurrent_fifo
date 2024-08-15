@@ -244,7 +244,11 @@ public:
 					claim_currently_claiming<&relaxed_fifo::write_currently_claiming, &relaxed_fifo::write_wants_move>();
 					switch (move_window_write()) {
 					case move_window_result::failure:
-						assert(false); // Both windows would be right in front of one another, this should not happen.
+						// This should basically never happen as both windows should be right in front of one another, if it does we just try again for now.
+						// TODO: This branch might only be triggered by a bug?
+						fifo.write_wants_move = false;
+						fifo.write_currently_claiming--;
+						return move_window_read();
 					case move_window_result::other_is_moving:
 						fifo.write_currently_claiming--;
 						while (fifo.write_wants_move) { }
