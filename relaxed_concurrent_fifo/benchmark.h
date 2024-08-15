@@ -29,7 +29,7 @@ public:
 protected:
 	template <typename T>
 	static size_t test_single(size_t num_threads, size_t test_time_seconds, double prefill_amount) {
-		T fifo{1024};
+		T fifo{65536};
 		auto handle = fifo.get_handle();
 		for (size_t i = 0; i < prefill_amount * 1024; i++) {
 			handle.push(i);
