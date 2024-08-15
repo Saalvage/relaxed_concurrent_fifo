@@ -118,7 +118,7 @@ public:
 
 		// Doing it like this allows the push code to grab a new block instead of requiring special cases for first-time initialization.
 		// An already active block will always trigger a check.
-		static inline block dummy_block{header{0, make_active(0)}};
+		static inline block dummy_block{header{0, make_active(0)}, {}};
 	
 		block* read_block = &dummy_block;
 		block* write_block = &dummy_block;
