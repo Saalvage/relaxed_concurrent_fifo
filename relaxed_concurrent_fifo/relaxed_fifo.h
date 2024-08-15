@@ -12,7 +12,14 @@
 
 #include <iostream>
 
-template <typename T, size_t BLOCKS_PER_WINDOW = 8, size_t CELLS_PER_BLOCK = std::hardware_constructive_interference_size / sizeof(T) - 1>
+constexpr size_t CACHE_SIZE =
+#if __cpp_lib_hardware_interference_size >= 201603
+	std::hardware_constructive_interference_size;
+#else
+	64;
+#endif // __cpp_lib_hardware_interference_size
+
+template <typename T, size_t BLOCKS_PER_WINDOW = 8, size_t CELLS_PER_BLOCK = CACHE_SIZE / sizeof(T) - 1>
 class relaxed_fifo {
 private:
 	// TODO: Optimize modulo.
@@ -57,8 +64,6 @@ private:
 		std::array<std::atomic<T>, CELLS_PER_BLOCK> cells;
 	};
 	static_assert(sizeof(block) == CELLS_PER_BLOCK * sizeof(T) + sizeof(header));
-	static_assert(sizeof(block) >= std::hardware_destructive_interference_size);
-	static_assert(sizeof(block) <= std::hardware_constructive_interference_size);
 
 	struct window {
 		// While writing these two sets are consistent.
