@@ -1,10 +1,6 @@
 #ifndef RELAXED_FIFO_H_INCLUDED
 #define RELAXED_FIFO_H_INCLUDED
 
-#ifdef __GNUC__
-#pragma GCC diagnostic ignored "-fpermissive"
-#endif
-
 #include <array>
 #include <memory>
 #include <atomic>

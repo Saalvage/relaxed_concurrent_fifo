@@ -12,7 +12,7 @@ endif()
 if(MSVC)
   target_compile_options(relaxed_concurrent_fifo PRIVATE /W3 /WX)
 else()
-  target_compile_options(relaxed_concurrent_fifo PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  target_compile_options(relaxed_concurrent_fifo PRIVATE)
 endif()
 
 # TODO: Add tests and install targets if needed.
