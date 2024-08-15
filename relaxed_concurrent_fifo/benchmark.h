@@ -14,6 +14,10 @@
 #include <future>
 #include <iostream>
 
+#ifdef _POSIX_VERSION
+#include <pthread.h>
+#endif // _POSIX_VERSION
+
 #include "relaxed_fifo.h"
 
 class benchmark_base {
@@ -46,6 +50,14 @@ protected:
 				}
 				results[i] = its;
 			});
+#ifdef _POSIX_VERSION
+			cpu_set_t cpu_set;
+			CPU_ZERO(&cpu_set);
+			CPU_SET(i, &cpu_set);
+			if (pthread_setaffinity_np(threads[i].native_handle(), sizeof(cpu_set_t), &cpu_set)) {
+				throw std::runtime_error("Failed to set thread affinity!");
+			}
+#endif // _POSIX_VERSION
 		}
 		auto start = std::chrono::system_clock::now();
 		a.arrive_and_wait();
