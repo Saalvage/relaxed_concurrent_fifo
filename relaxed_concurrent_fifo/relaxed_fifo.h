@@ -32,29 +32,29 @@ private:
 	using handle_id = uint8_t;
 
 	// 8 bits handle, 6 bits epoch, 1 bit write/read, 1 bit inactive/active
-	using state = uint16_t;
+	using state_t = uint16_t;
 
 	static_assert(sizeof(T) == 8);
 	static_assert(sizeof(std::atomic<T>) == 8);
 
-	static constexpr state make_active(state marker) { return marker | 1; }
-	static constexpr state make_inactive(state marker) { return marker & ~1; }
-	static constexpr bool is_active(state marker) { return marker & 1; }
+	static constexpr state_t make_active(state_t marker) { return marker | 1; }
+	static constexpr state_t make_inactive(state_t marker) { return marker & ~1; }
+	static constexpr bool is_active(state_t marker) { return marker & 1; }
 
-	static constexpr state make_write(state marker) { return marker & ~0b10; }
-	static constexpr state make_read(state marker) { return marker | 0b10; }
-	static constexpr bool is_read(state marker) { return marker & 0b10; }
-	static constexpr bool is_write(state marker) { return !is_read(marker); }
+	static constexpr state_t make_write(state_t marker) { return marker & ~0b10; }
+	static constexpr state_t make_read(state_t marker) { return marker | 0b10; }
+	static constexpr bool is_read(state_t marker) { return marker & 0b10; }
+	static constexpr bool is_write(state_t marker) { return !is_read(marker); }
 
-	static constexpr state set_id(state marker, handle_id id) { return (marker ^ 0xff00) | (id << 8); }
+	static constexpr state_t set_id(state_t marker, handle_id id) { return (marker ^ 0xff00) | (id << 8); }
 
 	template <bool is_write>
-	state make_state(handle_id id, size_t window) const {
-		return (static_cast<state>(id) << 8) | (((window / window_count) & 0b111111) << 2) | (!is_write << 1);
+	state_t make_state(handle_id id, size_t window) const {
+		return (static_cast<state_t>(id) << 8) | (((window / window_count) & 0b111111) << 2) | (!is_write << 1);
 	}
 
 	struct alignas(8) header {
-		std::atomic<state> state;
+		std::atomic<state_t> state;
 		std::atomic_uint16_t curr_index;
 	};
 	static_assert(sizeof(header) == 8);
@@ -127,8 +127,8 @@ public:
 		uint64_t read_window;
 
 		// These represent an inactive occupation of the current epoch.
-		state write_occ;
-		state read_occ;
+		state_t write_occ;
+		state_t read_occ;
 
 		handle(relaxed_fifo& fifo) : fifo(fifo), id(fifo.get_handle_id()) {
 			write_window = fifo.write_window;
@@ -314,7 +314,7 @@ public:
 					break;
 				}
 				auto& my_header = fifo.get_read_window().blocks[free_bit].header;
-				state state = my_header.state;
+				state_t state = my_header.state;
 				if (!is_active(state) && my_header.state.compare_exchange_strong(state, fifo.make_active(fifo.make_state<false>(id, fifo.read_window)))) {
 					if (my_header.curr_index != 0) {
 						break;
@@ -337,7 +337,7 @@ public:
 						auto idx = (i + off) % bits.size();
 						if (bits[idx]) {
 							header& header = fifo.get_read_window().blocks[idx].header;
-							state state = header.state;
+							state_t state = header.state;
 							if (!is_active(state) && header.state.compare_exchange_strong(state, fifo.make_active(fifo.make_state<false>(id, fifo.read_window)))) {
 								if (header.curr_index != 0) {
 									// We managed to steal a block!
