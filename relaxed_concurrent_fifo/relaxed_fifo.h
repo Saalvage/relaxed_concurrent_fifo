@@ -53,33 +53,33 @@ private:
 		return (static_cast<state_t>(id) << 8) | (((window / window_count) & 0b111111) << 2) | (!is_write << 1);
 	}
 
-	struct alignas(8) header {
+	struct alignas(8) header_t {
 		std::atomic<state_t> state;
 		std::atomic_uint16_t curr_index;
 	};
-	static_assert(sizeof(header) == 8);
+	static_assert(sizeof(header_t) == 8);
 
-	struct block {
-		header header;
+	struct block_t {
+		header_t header;
 		std::array<std::atomic<T>, CELLS_PER_BLOCK> cells;
 	};
-	static_assert(sizeof(block) == CELLS_PER_BLOCK * sizeof(T) + sizeof(header));
+	static_assert(sizeof(block_t) == CELLS_PER_BLOCK * sizeof(T) + sizeof(header_t));
 
-	struct window {
+	struct window_t {
 		// While writing these two sets are consistent.
 		// While reading a block can be occupied but it can still be filled. (Filled is a superset of occupied.)
 		atomic_bitset<BLOCKS_PER_WINDOW> occupied_set;
 		atomic_bitset<BLOCKS_PER_WINDOW> filled_set;
-		block blocks[BLOCKS_PER_WINDOW];
+		block_t blocks[BLOCKS_PER_WINDOW];
 	};
 
-	std::unique_ptr<window[]> buffer;
+	std::unique_ptr<window_t[]> buffer;
 	
 	std::atomic_uint64_t read_window = 0;
 	std::atomic_uint64_t write_window = 1;
 
-	window& get_read_window() { return buffer[read_window % window_count]; }
-	window& get_write_window() { return buffer[write_window % window_count]; }
+	window_t& get_read_window() { return buffer[read_window % window_count]; }
+	window_t& get_write_window() { return buffer[write_window % window_count]; }
 
 	std::atomic_bool read_wants_move;
 	std::atomic_bool write_wants_move;
@@ -95,7 +95,7 @@ private:
 
 public:
 	relaxed_fifo(size_t size) : window_count(size / BLOCKS_PER_WINDOW / CELLS_PER_BLOCK) {
-		buffer = std::make_unique<window[]>(window_count);
+		buffer = std::make_unique<window_t[]>(window_count);
 	}
 
 	void debug_print() {
@@ -103,7 +103,7 @@ public:
 			<< "Read: " << read_window << "; Write: " << write_window << '\n';
 		for (size_t i = 0; i < window_count; i++) {
 			for (size_t j = 0; j < BLOCKS_PER_WINDOW; j++) {
-				header& header = buffer[i].blocks[j].header;
+				header_t& header = buffer[i].blocks[j].header;
 				std::cout << std::bitset<16>(header.state) << " " << header.curr_index << " | ";
 			}
 			std::cout << "\n======================\n";
@@ -118,10 +118,10 @@ public:
 
 		// Doing it like this allows the push code to grab a new block instead of requiring special cases for first-time initialization.
 		// An already active block will always trigger a check.
-		static inline block dummy_block{header{0, make_active(0)}, {}};
+		static inline block_t dummy_block{header_t{0, make_active(0)}, {}};
 	
-		block* read_block = &dummy_block;
-		block* write_block = &dummy_block;
+		block_t* read_block = &dummy_block;
+		block_t* write_block = &dummy_block;
 
 		uint64_t write_window;
 		uint64_t read_window;
@@ -336,7 +336,7 @@ public:
 					for (size_t i = 0; i < bits.size(); i++) {
 						auto idx = (i + off) % bits.size();
 						if (bits[idx]) {
-							header& header = fifo.get_read_window().blocks[idx].header;
+							header_t& header = fifo.get_read_window().blocks[idx].header;
 							state_t state = header.state;
 							if (!is_active(state) && header.state.compare_exchange_strong(state, fifo.make_active(fifo.make_state<false>(id, fifo.read_window)))) {
 								if (header.curr_index != 0) {
@@ -399,7 +399,7 @@ public:
 
 	public:
 		bool push(T t) {
-			header* header = &write_block->header;
+			header_t* header = &write_block->header;
 			auto expected = write_occ;
 			if (!header->state.compare_exchange_strong(expected, make_active(expected))
 				|| fifo.write_wants_move
@@ -423,7 +423,7 @@ public:
 		}
 
 		std::optional<T> pop() {
-			header* header = &read_block->header;
+			header_t* header = &read_block->header;
 			auto expected = read_occ;
 			if (!header->state.compare_exchange_strong(expected, make_active(expected))
 				|| fifo.read_wants_move
@@ -435,7 +435,7 @@ public:
 					header->state = read_occ;
 				}
 				if (header->curr_index == 0) {
-					window& window = fifo.buffer[read_window % fifo.window_count];
+					window_t& window = fifo.buffer[read_window % fifo.window_count];
 					auto diff = read_block - window.blocks;
 					window.filled_set.reset(diff);
 				}
