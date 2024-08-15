@@ -307,8 +307,6 @@ public:
 		bool claim_new_block_read() {
 			claim_currently_claiming<&relaxed_fifo::read_currently_claiming, &relaxed_fifo::read_wants_move>();
 
-			auto set_where = 0;
-
 			size_t free_bit;
 			do {
 				free_bit = claim_free_bit<false>(fifo.get_read_window().occupied_set);
@@ -326,7 +324,6 @@ public:
 					}
 				}
 			} while (true);
-			set_where = 1;
 
 			// This can be a if instead of a while because we are guaranteed to claim a free bit in a new window (at least when writing).
 			if (free_bit == std::numeric_limits<size_t>::max()) {
@@ -346,7 +343,6 @@ public:
 									// We managed to steal a block!
 									any_left = false;
 									free_bit = idx;
-									set_where = 3;
 									break;
 								} else {
 									// It was emptied in the meantime!
@@ -378,10 +374,6 @@ public:
 						free_bit = claim_free_bit<false>(fifo.get_read_window().occupied_set);
 						auto& header = fifo.get_read_window().blocks[free_bit].header; // We need to claim immediately.
 						header.state = fifo.make_active(fifo.make_state<false>(id, fifo.read_window));
-						set_where = fifo.get_read_window().blocks[free_bit].header.curr_index;
-						if (fifo.get_read_window().blocks[free_bit].header.curr_index == 0) {
-							fifo.debug_print();
-						}
 						fifo.read_wants_move = false;
 						// No write happened in this window.
 						// This theoretically shouldn't happen but handling this case shouldn't hurt.
