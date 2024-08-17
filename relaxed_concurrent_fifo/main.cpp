@@ -75,6 +75,10 @@ int main() {
 	}
 	std::unique_ptr<benchmark_base> instances[] = {std::make_unique<benchmark_relaxed>("relaxed"), std::make_unique<benchmark<lock_fifo<uint64_t>>>("lock"), std::make_unique<benchmark<concurrent_fifo<uint64_t>>>("concurrent")};
 
+#ifndef NDEBUG
+	std::cout << "Running in debug mode!" << std::endl;
+#endif // NDEBUG
+
 	std::cout << "Expected running time: " << sizeof(PREFILL_AMOUNTS) / sizeof(*PREFILL_AMOUNTS) * TEST_ITERATIONS * TEST_TIME_SECONDS * processor_counts.size() * sizeof(instances) / sizeof(*instances) << " seconds" << std::endl;
 	for (auto prefill : PREFILL_AMOUNTS) {
 		std::cout << "Prefilling with " << prefill << std::endl;
