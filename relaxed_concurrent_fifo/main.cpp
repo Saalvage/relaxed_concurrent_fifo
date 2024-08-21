@@ -147,7 +147,7 @@ int main() {
 	std::cout << "Expected running time: " << sizeof(PREFILL_AMOUNTS) / sizeof(*PREFILL_AMOUNTS) * TEST_ITERATIONS * TEST_TIME_SECONDS * processor_counts.size() * sizeof(instances) / sizeof(*instances) << " seconds" << std::endl;
 	for (auto prefill : PREFILL_AMOUNTS) {
 		std::cout << "Prefilling with " << prefill << std::endl;
-		std::ofstream file{"fifo-data-latest.csv"};
+		std::ofstream file{std::format(format, prefill, std::chrono::round<std::chrono::seconds>(std::chrono::file_clock::now()))};
 		for (const auto& imp : instances) {
 			std::cout << "Testing " << imp->get_name() << std::endl;
 			//test_all<lock_fifo>();
