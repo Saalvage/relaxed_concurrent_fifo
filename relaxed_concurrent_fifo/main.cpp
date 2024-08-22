@@ -62,9 +62,9 @@ void test_all() {
 	test_full_push<T>();
 }
 
-template <size_t THREAD_COUNT, size_t FIFO_SIZE, uint32_t PER_THREAD_ELEMENTS>
+template <size_t THREAD_COUNT, size_t BLOCK_MULTIPLIER, size_t FIFO_SIZE, uint32_t PER_THREAD_ELEMENTS>
 void test_consistency() {
-	relaxed_fifo<uint64_t, THREAD_COUNT> fifo{FIFO_SIZE};
+	relaxed_fifo<uint64_t, THREAD_COUNT * BLOCK_MULTIPLIER> fifo{FIFO_SIZE};
 	auto handle = fifo.get_handle();
 
 	constexpr int pre_push = FIFO_SIZE / 2;
@@ -124,40 +124,64 @@ void test_consistency() {
 	}
 }
 
-int main() {
-	test_consistency<8, 1 << 12, 1 << 20>();
-
-	namespace fs = std::filesystem;
-
-	constexpr const char* format = "fifo-data-{}-{:%FT%H-%M-%S}.csv";
-
-	static constexpr double PREFILL_AMOUNTS[] = {0.5};
-	static constexpr int TEST_TIME_SECONDS = 10;
-	static constexpr int TEST_ITERATIONS = 5;
-	std::vector<size_t> processor_counts;
-	for (size_t i = 1; i <= std::thread::hardware_concurrency(); i *= 2) {
-		processor_counts.emplace_back(i);
-	}
-	std::unique_ptr<benchmark_base> instances[] = {std::make_unique<benchmark_relaxed>("relaxed"), std::make_unique<benchmark<lock_fifo<uint64_t>>>("lock"), std::make_unique<benchmark<concurrent_fifo<uint64_t>>>("concurrent")};
-
+void run_benchmark(const std::vector<std::unique_ptr<benchmark_base>>& instances, const std::vector<double>& prefill_amounts,
+	const std::vector<size_t>& processor_counts, int test_iterations, int test_time_seconds) {
 #ifndef NDEBUG
 	std::cout << "Running in debug mode!" << std::endl;
 #endif // NDEBUG
 
-	std::cout << "Expected running time: " << sizeof(PREFILL_AMOUNTS) / sizeof(*PREFILL_AMOUNTS) * TEST_ITERATIONS * TEST_TIME_SECONDS * processor_counts.size() * sizeof(instances) / sizeof(*instances) << " seconds" << std::endl;
-	for (auto prefill : PREFILL_AMOUNTS) {
+	constexpr const char* format = "fifo-data-{}-{:%FT%H-%M-%S}.csv";
+
+	std::cout << "Expected running time: " << prefill_amounts.size() * test_iterations * test_time_seconds * processor_counts.size() * instances.size() << " seconds" << std::endl;
+	for (auto prefill : prefill_amounts) {
 		std::cout << "Prefilling with " << prefill << std::endl;
 		std::ofstream file{std::format(format, prefill, std::chrono::round<std::chrono::seconds>(std::chrono::file_clock::now()))};
 		for (const auto& imp : instances) {
 			std::cout << "Testing " << imp->get_name() << std::endl;
-			//test_all<lock_fifo>();
 			for (auto i : processor_counts) {
 				std::cout << "With " << i << " processors" << std::endl;
-				for (auto res : imp->test(i, TEST_ITERATIONS, TEST_TIME_SECONDS, prefill)) {
+				for (auto res : imp->test(i, test_iterations, test_time_seconds, prefill)) {
 					file << imp->get_name() << "," << i << ',' << res << '\n';
 				}
 			}
 		}
+	}
+}
+
+int main() {
+	//test_consistency<8, 2, 65536, 1 << 20>();
+
+	namespace fs = std::filesystem;
+
+	std::vector<size_t> processor_counts;
+	for (size_t i = 1; i <= std::thread::hardware_concurrency(); i *= 2) {
+		processor_counts.emplace_back(i);
+	}
+
+	constexpr int OVERRIDE_CHOICE = 0;
+	constexpr int TEST_ITERATIONS = 1;
+	constexpr int TEST_TIME_SECONDS = 10;
+
+	int input;
+	if (OVERRIDE_CHOICE == 0) {
+		std::cout << "Which experiment to run?\n[1] FIFO Comparison\n[2] Block per Window Multipliers\nInput: ";
+		std::cin >> input;
+	}
+
+	if (OVERRIDE_CHOICE == 1 || OVERRIDE_CHOICE == 0 && input == 1) {
+		std::vector<std::unique_ptr<benchmark_base>> instances;
+		instances.push_back(std::make_unique<benchmark_relaxed<4>>("relaxed"));
+		instances.push_back(std::make_unique<benchmark<lock_fifo<uint64_t>>>("lock"));
+		instances.push_back(std::make_unique<benchmark<concurrent_fifo<uint64_t>>>("concurrent"));
+		run_benchmark(instances, { 0.5 }, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
+	} else if (OVERRIDE_CHOICE == 2 || OVERRIDE_CHOICE == 0 && input == 2) {
+		std::vector<std::unique_ptr<benchmark_base>> instances;
+		instances.push_back(std::make_unique<benchmark_relaxed<1>>("1"));
+		instances.push_back(std::make_unique<benchmark_relaxed<2>>("2"));
+		instances.push_back(std::make_unique<benchmark_relaxed<4>>("4"));
+		instances.push_back(std::make_unique<benchmark_relaxed<8>>("8"));
+		instances.push_back(std::make_unique<benchmark_relaxed<16>>("16"));
+		run_benchmark(instances, { 0.5 }, { processor_counts.back() }, TEST_ITERATIONS, TEST_TIME_SECONDS);
 	}
 
 	return 0;

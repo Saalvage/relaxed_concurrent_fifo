@@ -99,6 +99,7 @@ private:
 	std::string name;
 };
 
+template <size_t BLOCK_MULTIPLIER = 1>
 class benchmark_relaxed : public benchmark_base {
 	public:
 		benchmark_relaxed(std::string name) : name(std::move(name)) { }
@@ -120,17 +121,17 @@ class benchmark_relaxed : public benchmark_base {
 
 		static size_t test_single_helper(size_t num_threads, size_t test_time_seconds, double prefill_amount) {
 			switch (num_threads) {
-			case 1: return test_single<relaxed_fifo<size_t, 1>>(num_threads, test_time_seconds, prefill_amount);
-			case 2: return test_single<relaxed_fifo<size_t, 2>>(num_threads, test_time_seconds, prefill_amount);
-			case 4: return test_single<relaxed_fifo<size_t, 4>>(num_threads, test_time_seconds, prefill_amount);
-			case 8: return test_single<relaxed_fifo<size_t, 8>>(num_threads, test_time_seconds, prefill_amount);
-			case 16: return test_single<relaxed_fifo<size_t, 16>>(num_threads, test_time_seconds, prefill_amount);
-			case 32: return test_single<relaxed_fifo<size_t, 32>>(num_threads, test_time_seconds, prefill_amount);
-			case 64: return test_single<relaxed_fifo<size_t, 64>>(num_threads, test_time_seconds, prefill_amount);
-			case 128: return test_single<relaxed_fifo<size_t, 128>>(num_threads, test_time_seconds, prefill_amount);
-			case 256: return test_single<relaxed_fifo<size_t, 256>>(num_threads, test_time_seconds, prefill_amount);
-			case 512: return test_single<relaxed_fifo<size_t, 512>>(num_threads, test_time_seconds, prefill_amount);
-			case 1024: return test_single<relaxed_fifo<size_t, 1024>>(num_threads, test_time_seconds, prefill_amount);
+			case 1: return test_single<relaxed_fifo<size_t, 1 * BLOCK_MULTIPLIER>>(num_threads, test_time_seconds, prefill_amount);
+			case 2: return test_single<relaxed_fifo<size_t, 2 * BLOCK_MULTIPLIER>>(num_threads, test_time_seconds, prefill_amount);
+			case 4: return test_single<relaxed_fifo<size_t, 4 * BLOCK_MULTIPLIER>>(num_threads, test_time_seconds, prefill_amount);
+			case 8: return test_single<relaxed_fifo<size_t, 8 * BLOCK_MULTIPLIER>>(num_threads, test_time_seconds, prefill_amount);
+			case 16: return test_single<relaxed_fifo<size_t, 16 * BLOCK_MULTIPLIER>>(num_threads, test_time_seconds, prefill_amount);
+			case 32: return test_single<relaxed_fifo<size_t, 32 * BLOCK_MULTIPLIER>>(num_threads, test_time_seconds, prefill_amount);
+			case 64: return test_single<relaxed_fifo<size_t, 64 * BLOCK_MULTIPLIER>>(num_threads, test_time_seconds, prefill_amount);
+			case 128: return test_single<relaxed_fifo<size_t, 128 * BLOCK_MULTIPLIER>>(num_threads, test_time_seconds, prefill_amount);
+			case 256: return test_single<relaxed_fifo<size_t, 256 * BLOCK_MULTIPLIER>>(num_threads, test_time_seconds, prefill_amount);
+			case 512: return test_single<relaxed_fifo<size_t, 512 * BLOCK_MULTIPLIER>>(num_threads, test_time_seconds, prefill_amount);
+			case 1024: return test_single<relaxed_fifo<size_t, 1024 * BLOCK_MULTIPLIER>>(num_threads, test_time_seconds, prefill_amount);
 			default: throw std::runtime_error("Unsupported thread count!");
 			}
 		}
