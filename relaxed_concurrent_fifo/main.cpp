@@ -159,7 +159,7 @@ int main() {
 	}
 
 	constexpr int OVERRIDE_CHOICE = 0;
-	constexpr int TEST_ITERATIONS = 1;
+	constexpr int TEST_ITERATIONS = 5;
 	constexpr int TEST_TIME_SECONDS = 10;
 
 	int input;
