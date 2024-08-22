@@ -11,7 +11,7 @@
 #include <unordered_set>
 #include <iostream>
 
-static constexpr int COUNT = 512;
+/*static constexpr int COUNT = 512;
 
 template <template <typename, size_t> typename T>
 void test_full_capacity() {
@@ -60,7 +60,7 @@ void test_all() {
 	test_single_element<T>();
 	test_empty_pop<T>();
 	test_full_push<T>();
-}
+}*/
 
 template <size_t THREAD_COUNT, size_t BLOCK_MULTIPLIER, size_t FIFO_SIZE, uint32_t PER_THREAD_ELEMENTS>
 void test_consistency() {
@@ -81,7 +81,6 @@ void test_consistency() {
 	std::vector<std::vector<uint64_t>> popped(THREAD_COUNT);
 	for (size_t i = 0; i < THREAD_COUNT; i++) {
 		threads[i] = std::jthread([&, i]() {
-			size_t its = 0;
 			auto handle = fifo.get_handle();
 			a.arrive_and_wait();
 			for (uint64_t j = 0; j < PER_THREAD_ELEMENTS; j++) {
@@ -168,13 +167,13 @@ int main() {
 		std::cin >> input;
 	}
 
-	if (OVERRIDE_CHOICE == 1 || OVERRIDE_CHOICE == 0 && input == 1) {
+	if (OVERRIDE_CHOICE == 1 || (OVERRIDE_CHOICE == 0 && input == 1)) {
 		std::vector<std::unique_ptr<benchmark_base>> instances;
 		instances.push_back(std::make_unique<benchmark_relaxed<4>>("relaxed"));
 		instances.push_back(std::make_unique<benchmark<lock_fifo<uint64_t>>>("lock"));
 		instances.push_back(std::make_unique<benchmark<concurrent_fifo<uint64_t>>>("concurrent"));
 		run_benchmark(instances, { 0.5 }, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
-	} else if (OVERRIDE_CHOICE == 2 || OVERRIDE_CHOICE == 0 && input == 2) {
+	} else if (OVERRIDE_CHOICE == 2 || (OVERRIDE_CHOICE == 0 && input == 2)) {
 		std::vector<std::unique_ptr<benchmark_base>> instances;
 		instances.push_back(std::make_unique<benchmark_relaxed<1>>("1"));
 		instances.push_back(std::make_unique<benchmark_relaxed<2>>("2"));
