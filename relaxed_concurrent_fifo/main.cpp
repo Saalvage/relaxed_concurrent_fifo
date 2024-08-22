@@ -123,7 +123,8 @@ void test_consistency() {
 	}
 }
 
-void run_benchmark(const std::vector<std::unique_ptr<benchmark_base>>& instances, const std::vector<double>& prefill_amounts,
+template <typename BENCHMARK>
+void run_benchmark(const std::vector<std::unique_ptr<benchmark_base<BENCHMARK>>>& instances, const std::vector<double>& prefill_amounts,
 	const std::vector<size_t>& processor_counts, int test_iterations, int test_time_seconds) {
 #ifndef NDEBUG
 	std::cout << "Running in debug mode!" << std::endl;
@@ -140,7 +141,9 @@ void run_benchmark(const std::vector<std::unique_ptr<benchmark_base>>& instances
 			for (auto i : processor_counts) {
 				std::cout << "With " << i << " processors" << std::endl;
 				for (auto res : imp->test(i, test_iterations, test_time_seconds, prefill)) {
-					file << imp->get_name() << "," << i << ',' << res << '\n';
+					file << imp->get_name() << "," << i << ',';
+					res.output(file);
+					file << '\n';
 				}
 			}
 		}
@@ -148,7 +151,7 @@ void run_benchmark(const std::vector<std::unique_ptr<benchmark_base>>& instances
 }
 
 int main() {
-	//test_consistency<8, 2, 65536, 1 << 20>();
+	//test_consistency<8, 512, 65536, 1 << 20>();
 
 	namespace fs = std::filesystem;
 
@@ -158,29 +161,37 @@ int main() {
 	}
 
 	constexpr int OVERRIDE_CHOICE = 0;
-	constexpr int TEST_ITERATIONS = 5;
-	constexpr int TEST_TIME_SECONDS = 10;
+	constexpr int TEST_ITERATIONS = 1;
+	constexpr int TEST_TIME_SECONDS = 5;
 
 	int input;
 	if (OVERRIDE_CHOICE == 0) {
-		std::cout << "Which experiment to run?\n[1] FIFO Comparison\n[2] Block per Window Multipliers\nInput: ";
+		std::cout << "Which experiment to run?\n[1] FIFO Comparison\n[2] Block per Window Multipliers\n[3] Quality\nInput: ";
 		std::cin >> input;
 	}
 
 	if (OVERRIDE_CHOICE == 1 || (OVERRIDE_CHOICE == 0 && input == 1)) {
-		std::vector<std::unique_ptr<benchmark_base>> instances;
-		instances.push_back(std::make_unique<benchmark_relaxed<4>>("relaxed"));
-		instances.push_back(std::make_unique<benchmark<lock_fifo<uint64_t>>>("lock"));
-		instances.push_back(std::make_unique<benchmark<concurrent_fifo<uint64_t>>>("concurrent"));
+		std::vector<std::unique_ptr<benchmark_base<benchmark_default>>> instances;
+		instances.push_back(std::make_unique<benchmark_relaxed<4, benchmark_default>>("relaxed"));
+		instances.push_back(std::make_unique<benchmark<lock_fifo<uint64_t>, benchmark_default>>("lock"));
+		instances.push_back(std::make_unique<benchmark<concurrent_fifo<uint64_t>, benchmark_default>>("concurrent"));
 		run_benchmark(instances, { 0.5 }, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
 	} else if (OVERRIDE_CHOICE == 2 || (OVERRIDE_CHOICE == 0 && input == 2)) {
-		std::vector<std::unique_ptr<benchmark_base>> instances;
-		instances.push_back(std::make_unique<benchmark_relaxed<1>>("1"));
-		instances.push_back(std::make_unique<benchmark_relaxed<2>>("2"));
-		instances.push_back(std::make_unique<benchmark_relaxed<4>>("4"));
-		instances.push_back(std::make_unique<benchmark_relaxed<8>>("8"));
-		instances.push_back(std::make_unique<benchmark_relaxed<16>>("16"));
+		std::vector<std::unique_ptr<benchmark_base<benchmark_default>>> instances;
+		instances.push_back(std::make_unique<benchmark_relaxed<1, benchmark_default>>("1"));
+		instances.push_back(std::make_unique<benchmark_relaxed<2, benchmark_default>>("2"));
+		instances.push_back(std::make_unique<benchmark_relaxed<4, benchmark_default>>("4"));
+		instances.push_back(std::make_unique<benchmark_relaxed<8, benchmark_default>>("8"));
+		instances.push_back(std::make_unique<benchmark_relaxed<16, benchmark_default>>("16"));
 		run_benchmark(instances, { 0.5 }, { processor_counts.back() }, TEST_ITERATIONS, TEST_TIME_SECONDS);
+	} else if (OVERRIDE_CHOICE == 3 || (OVERRIDE_CHOICE == 0 && input == 3)) {
+		auto a = benchmark_relaxed<4, benchmark_quality>("quality").test(4, 1, 5, 0.5)[0];
+		std::ofstream file{"test.csv"};
+		for (const auto& thread_result : a.results) {
+			for (const auto& [pushed, popped] : thread_result) {
+				file << pushed << ',' << popped << '\n';
+			}
+		}
 	}
 
 	return 0;
