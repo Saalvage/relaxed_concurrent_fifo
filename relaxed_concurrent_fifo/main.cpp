@@ -10,6 +10,8 @@
 #include <fstream>
 #include <unordered_set>
 #include <iostream>
+#include <map>
+#include <set>
 
 /*static constexpr int COUNT = 512;
 
@@ -186,12 +188,24 @@ int main() {
 		run_benchmark(instances, { 0.5 }, { processor_counts.back() }, TEST_ITERATIONS, TEST_TIME_SECONDS);
 	} else if (OVERRIDE_CHOICE == 3 || (OVERRIDE_CHOICE == 0 && input == 3)) {
 		auto a = benchmark_relaxed<4, benchmark_quality>("quality").test(4, 1, 5, 0.5)[0];
-		std::ofstream file{"test.csv"};
+		std::map<uint64_t, uint64_t> pushed_to_popped_map;
+		std::multiset<uint64_t> popped_set;
 		for (const auto& thread_result : a.results) {
 			for (const auto& [pushed, popped] : thread_result) {
-				file << pushed << ',' << popped << '\n';
+				if (pushed != 0 && pushed_to_popped_map.try_emplace(pushed, popped).second) {
+					popped_set.insert(popped);
+				}
 			}
 		}
+		uint64_t i = 0;
+		uint64_t total_diff = 0;
+		std::vector<uint64_t> popped_vec(popped_set.begin(), popped_set.end());
+		for (const auto& [pushed, popped] : pushed_to_popped_map) {
+			uint64_t popped_index = std::lower_bound(popped_vec.begin(), popped_vec.end(), popped) - popped_vec.begin();
+			total_diff += popped_index > i ? popped_index - i : i - popped_index;
+			i++;
+		}
+		std::cout << "Avg pop error: " << (double)total_diff / pushed_to_popped_map.size() << std::endl;
 	}
 
 	return 0;
