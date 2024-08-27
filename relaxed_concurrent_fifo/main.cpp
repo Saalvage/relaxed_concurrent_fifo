@@ -187,25 +187,29 @@ int main() {
 		instances.push_back(std::make_unique<benchmark_relaxed<16, benchmark_default>>("16"));
 		run_benchmark(instances, { 0.5 }, { processor_counts.back() }, TEST_ITERATIONS, TEST_TIME_SECONDS);
 	} else if (OVERRIDE_CHOICE == 3 || (OVERRIDE_CHOICE == 0 && input == 3)) {
-		auto a = benchmark_relaxed<4, benchmark_quality>("quality").test(4, 1, 5, 0.5)[0];
-		std::map<uint64_t, uint64_t> pushed_to_popped_map;
+		auto a = benchmark_relaxed<4, benchmark_quality>("quality").test(4, 1, 1, 0.5)[0];
+		std::multimap<uint64_t, uint64_t> pushed_to_popped_map;
 		std::multiset<uint64_t> popped_set;
 		for (const auto& thread_result : a.results) {
 			for (const auto& [pushed, popped] : thread_result) {
-				if (pushed != 0 && pushed_to_popped_map.try_emplace(pushed, popped).second) {
+				if (pushed != 0) {
+					pushed_to_popped_map.emplace(pushed, popped);
 					popped_set.insert(popped);
 				}
 			}
 		}
 		uint64_t i = 0;
-		uint64_t total_diff = 0;
+		// We're using the doubled diff because when there are multiple of the same pop timing
+		// we're adding the average index which would require using floating point values.
+		uint64_t total_diff_doubled = 0;
 		std::vector<uint64_t> popped_vec(popped_set.begin(), popped_set.end());
 		for (const auto& [pushed, popped] : pushed_to_popped_map) {
-			uint64_t popped_index = std::lower_bound(popped_vec.begin(), popped_vec.end(), popped) - popped_vec.begin();
-			total_diff += popped_index > i ? popped_index - i : i - popped_index;
-			i++;
+			auto [popped_min, popped_max] = std::equal_range(popped_vec.begin(), popped_vec.end(), popped);
+			uint64_t popped_index_doubled = 2 * (popped_min - popped_vec.begin()) + (popped_max - popped_min);
+			total_diff_doubled += popped_index_doubled > i ? popped_index_doubled - i : i - popped_index_doubled;
+			i += 2;
 		}
-		std::cout << "Avg pop error: " << (double)total_diff / pushed_to_popped_map.size() << std::endl;
+		std::cout << "Avg pop error: " << total_diff_doubled / 2.0 / pushed_to_popped_map.size() << std::endl;
 	}
 
 	return 0;
