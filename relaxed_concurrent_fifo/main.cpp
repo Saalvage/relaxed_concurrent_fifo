@@ -154,7 +154,7 @@ void run_benchmark(const std::vector<std::unique_ptr<benchmark_base<BENCHMARK>>>
 }
 
 int main() {
-	//test_consistency<8, 512, 65536, 1 << 20>();
+	//test_consistency<8, 512, 1 << 17, 1 << 20>();
 
 	namespace fs = std::filesystem;
 
