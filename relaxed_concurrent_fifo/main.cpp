@@ -208,7 +208,7 @@ int main() {
 		uint64_t i = 0;
 		// We're using the doubled diff because when there are multiple of the same pop timing
 		// we're adding the average index which would require using floating point values.
-		std::atomic<uint64_t> total_diff_doubled = std::transform_reduce(std::execution::par_unseq, pushed_to_popped.begin(), pushed_to_popped.end(), 0ull, std::plus<uint64_t>(), [&](const auto& pair) {
+		uint64_t total_diff_doubled = std::transform_reduce(std::execution::par_unseq, pushed_to_popped.begin(), pushed_to_popped.end(), 0ull, std::plus<uint64_t>(), [&](const auto& pair) {
 			uint64_t i = 2 * (&pair - &pushed_to_popped[0]);
 			auto& [pushed, popped] = pair;
 			auto [popped_min, popped_max] = std::equal_range(popped_vec.begin(), popped_vec.end(), popped);
