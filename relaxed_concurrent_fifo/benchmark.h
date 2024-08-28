@@ -93,7 +93,7 @@ protected:
 			}
 #endif // _POSIX_VERSION
 		}
-		auto start = std::chrono::system_clock::now();
+		auto start = std::chrono::steady_clock::now();
 		a.arrive_and_wait();
 		std::this_thread::sleep_until(start + std::chrono::seconds(test_time_seconds));
 		over = true;
