@@ -74,7 +74,7 @@ protected:
 		FIFO fifo{SIZE};
 		auto handle = fifo.get_handle();
 		for (size_t i = 0; i < prefill_amount * SIZE; i++) {
-			handle.push(0);
+			handle.push(i);
 		}
 		std::barrier a{ (ptrdiff_t)(num_threads + 1) };
 		std::atomic_bool over = false;

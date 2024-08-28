@@ -197,10 +197,8 @@ int main() {
 		popped_vec.reserve(total_count);
 		for (const auto& thread_result : results) {
 			for (const auto& [pushed, popped] : thread_result) {
-				if (pushed != 0) {
-					pushed_to_popped.emplace_back(pushed, popped);
-					popped_vec.emplace_back(popped);
-				}
+				pushed_to_popped.emplace_back(pushed, popped);
+				popped_vec.emplace_back(popped);
 			}
 		}
 		std::sort(std::execution::par_unseq, pushed_to_popped.begin(), pushed_to_popped.end());
