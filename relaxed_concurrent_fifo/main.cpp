@@ -66,11 +66,11 @@ void test_all() {
 }*/
 
 template <size_t THREAD_COUNT, size_t BLOCK_MULTIPLIER, size_t FIFO_SIZE, uint32_t PER_THREAD_ELEMENTS>
-void test_consistency() {
+void test_consistency(double prefill) {
 	relaxed_fifo<uint64_t, THREAD_COUNT * BLOCK_MULTIPLIER> fifo{FIFO_SIZE};
 	auto handle = fifo.get_handle();
 
-	constexpr int pre_push = FIFO_SIZE / 2;
+	size_t pre_push = static_cast<size_t>(FIFO_SIZE * prefill);
 	std::unordered_multiset<uint64_t> test_ints;
 	for (size_t index = 0; index < pre_push; index++) {
 		auto i = index | (1ull << 63);
@@ -129,10 +129,6 @@ void test_consistency() {
 template <typename BENCHMARK>
 void run_benchmark(const std::vector<std::unique_ptr<benchmark_base<BENCHMARK>>>& instances, const std::vector<double>& prefill_amounts,
 	const std::vector<size_t>& processor_counts, int test_iterations, int test_time_seconds) {
-#ifndef NDEBUG
-	std::cout << "Running in debug mode!" << std::endl;
-#endif // NDEBUG
-
 	constexpr const char* format = "fifo-data-{}-{:%FT%H-%M-%S}.csv";
 
 	std::cout << "Expected running time: " << prefill_amounts.size() * test_iterations * test_time_seconds * processor_counts.size() * instances.size() << " seconds" << std::endl;
@@ -154,7 +150,11 @@ void run_benchmark(const std::vector<std::unique_ptr<benchmark_base<BENCHMARK>>>
 }
 
 int main() {
-	//test_consistency<8, 512, 1 << 17, 1 << 20>();
+#ifndef NDEBUG
+	std::cout << "Running in debug mode!" << std::endl;
+#endif // NDEBUG
+
+	//test_consistency<8, 512, 1 << 17, 1 << 20>(0);
 
 	namespace fs = std::filesystem;
 
@@ -203,17 +203,21 @@ int main() {
 		}
 		std::sort(std::execution::par_unseq, pushed_to_popped.begin(), pushed_to_popped.end());
 		std::sort(std::execution::par_unseq, popped_vec.begin(), popped_vec.end());
-		uint64_t i = 0;
+		std::atomic_uint64_t max = 0;
 		// We're using the doubled diff because when there are multiple of the same pop timing
 		// we're adding the average index which would require using floating point values.
-		std::atomic<uint64_t> total_diff_doubled = std::transform_reduce(std::execution::par_unseq, pushed_to_popped.begin(), pushed_to_popped.end(), 0ull, std::plus<uint64_t>(), [&](const auto& pair) {
-			uint64_t i = 2 * (&pair - &pushed_to_popped[0]);
+		uint64_t total_diff_doubled = std::transform_reduce(std::execution::par_unseq, pushed_to_popped.begin(), pushed_to_popped.end(), 0ull, std::plus<uint64_t>(), [&](const auto& pair) {
+			uint64_t i = &pair - &pushed_to_popped[0];
 			auto& [pushed, popped] = pair;
 			auto [popped_min, popped_max] = std::equal_range(popped_vec.begin(), popped_vec.end(), popped);
+			uint64_t popped_index_max = popped_max - popped_vec.begin();
+			uint64_t max_new = popped_index_max > i ? popped_index_max - i : i - popped_index_max;
+			uint64_t max_curr = max;
+			while (max_curr < max_new && !max.compare_exchange_strong(max_curr, max_new)) { }
 			uint64_t popped_index_doubled = 2 * (popped_min - popped_vec.begin()) + (popped_max - popped_min);
-			return popped_index_doubled > i ? popped_index_doubled - i : i - popped_index_doubled;
+			return popped_index_doubled > 2 * i ? popped_index_doubled - 2 * i : 2 * i - popped_index_doubled;
 		});
-		std::cout << "Avg pop error: " << total_diff_doubled / 2.0 / pushed_to_popped.size() << " with " << pushed_to_popped.size() << " elements" << std::endl;
+		std::cout << "Avg pop error: " << total_diff_doubled / 2.0 / pushed_to_popped.size() << " with " << pushed_to_popped.size() << " elements and a max of " << max << std::endl;
 		std::cout << "Took " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time).count() << "ms";
 	}
 
