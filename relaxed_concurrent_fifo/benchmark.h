@@ -70,10 +70,12 @@ public:
 protected:
 	template <typename FIFO>
 	static BENCHMARK test_single(size_t num_threads, size_t test_time_seconds, double prefill_amount) {
-		constexpr size_t SIZE = 2 * 65536;
-		FIFO fifo{SIZE};
+		size_t hw = std::thread::hardware_concurrency();
+		// Make sure we have enough space for at least 4 (not 3 so it's PO2) windows where each window supports HW threads with HW blocks each with HW cells each.
+		size_t size = 4 * hw * hw * hw;
+		FIFO fifo{size};
 		auto handle = fifo.get_handle();
-		for (size_t i = 0; i < prefill_amount * SIZE; i++) {
+		for (size_t i = 0; i < prefill_amount * size; i++) {
 			handle.push(i);
 		}
 		std::barrier a{ (ptrdiff_t)(num_threads + 1) };
