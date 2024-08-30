@@ -356,7 +356,7 @@ public:
 									header.state = fifo.make_inactive(header.state); // TODO: Is this correct??
 								} 
 							} else {
-								// The block got stolen by someone else, we'll look for another one and eventually return if we fail!
+								// The block is active or got stolen by someone else, we'll look for another one and eventually return if we fail!
 								any_left = true;
 							}
 						}
@@ -433,18 +433,12 @@ public:
 			header_t* header = &read_block->header;
 			auto expected = read_occ;
 			if (!header->state.compare_exchange_strong(expected, make_active(expected))
-				|| fifo.read_wants_move
-				|| header->curr_index == 0) {
+				|| fifo.read_wants_move) {
 				// Something happened, someone wants to move the window or our block is full, we get a new block!
 				if (expected == read_occ) { // TODO: I don't think this is allowed!!!
 					// We only reset the header state if the CAS succeeded (we managed to claim the block).
 					// TODO: Preferable to split the method again?
 					header->state = read_occ;
-				}
-				if (header->curr_index == 0) {
-					window_t& window = fifo.buffer[read_window % fifo.window_count];
-					auto diff = read_block - window.blocks;
-					window.filled_set.reset(diff);
 				}
 				if (!claim_new_block_read()) {
 					return std::nullopt;
@@ -453,6 +447,14 @@ public:
 			}
 
 			auto&& ret = std::move(read_block->cells[--header->curr_index]);
+
+			// We're resetting the filled bit asap so we can avoid a deeper-going check for this block while claiming.
+			if (header->curr_index == 0) {
+				window_t& window = fifo.buffer[read_window % fifo.window_count];
+				auto diff = read_block - window.blocks;
+				window.filled_set.reset(diff);
+				read_block = &dummy_block;
+			}
 			
 			header->state = read_occ;
 			return ret;

@@ -131,7 +131,10 @@ void run_benchmark(const std::string& test_name, const std::vector<std::unique_p
 	const std::vector<size_t>& processor_counts, int test_iterations, int test_time_seconds) {
 	constexpr const char* format = "fifo-{}-{}-{:%FT%H-%M-%S}.csv";
 
-	std::cout << "Expected running time: " << prefill_amounts.size() * test_iterations * test_time_seconds * processor_counts.size() * instances.size() << " seconds" << std::endl;
+	if (BENCHMARK::use_timing) {
+		std::cout << "Expected running time: " << prefill_amounts.size() * test_iterations * test_time_seconds * processor_counts.size() * instances.size() << " seconds" << std::endl;
+	}
+
 	for (auto prefill : prefill_amounts) {
 		std::cout << "Prefilling with " << prefill << std::endl;
 		std::ofstream file{std::format(format, test_name, prefill, std::chrono::round<std::chrono::seconds>(std::chrono::file_clock::now()))};
@@ -154,7 +157,7 @@ int main() {
 	std::cout << "Running in debug mode!" << std::endl;
 #endif // NDEBUG
 
-	//test_consistency<8, 512, 1 << 17, 1 << 20>(0);
+	//test_consistency<8, 512, 1 << 17, 1 << 20>(0.5);
 
 	namespace fs = std::filesystem;
 
