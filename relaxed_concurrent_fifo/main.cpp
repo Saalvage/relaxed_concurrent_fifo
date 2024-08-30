@@ -127,14 +127,14 @@ void test_consistency(double prefill) {
 }
 
 template <typename BENCHMARK>
-void run_benchmark(const std::vector<std::unique_ptr<benchmark_base<BENCHMARK>>>& instances, const std::vector<double>& prefill_amounts,
+void run_benchmark(const std::string& test_name, const std::vector<std::unique_ptr<benchmark_provider<BENCHMARK>>>& instances, const std::vector<double>& prefill_amounts,
 	const std::vector<size_t>& processor_counts, int test_iterations, int test_time_seconds) {
-	constexpr const char* format = "fifo-data-{}-{:%FT%H-%M-%S}.csv";
+	constexpr const char* format = "fifo-{}-{}-{:%FT%H-%M-%S}.csv";
 
 	std::cout << "Expected running time: " << prefill_amounts.size() * test_iterations * test_time_seconds * processor_counts.size() * instances.size() << " seconds" << std::endl;
 	for (auto prefill : prefill_amounts) {
 		std::cout << "Prefilling with " << prefill << std::endl;
-		std::ofstream file{std::format(format, prefill, std::chrono::round<std::chrono::seconds>(std::chrono::file_clock::now()))};
+		std::ofstream file{std::format(format, test_name, prefill, std::chrono::round<std::chrono::seconds>(std::chrono::file_clock::now()))};
 		for (const auto& imp : instances) {
 			std::cout << "Testing " << imp->get_name() << std::endl;
 			for (auto i : processor_counts) {
@@ -169,26 +169,26 @@ int main() {
 
 	int input;
 	if (OVERRIDE_CHOICE == 0) {
-		std::cout << "Which experiment to run?\n[1] FIFO Comparison\n[2] Block per Window Multipliers\n[3] Quality\nInput: ";
+		std::cout << "Which experiment to run?\n[1] FIFO Comparison\n[2] Block per Window Multipliers\n[3] Quality\n[4] Fill\n[5] Empty\nInput: ";
 		std::cin >> input;
 	}
 
 	if (OVERRIDE_CHOICE == 1 || (OVERRIDE_CHOICE == 0 && input == 1)) {
-		std::vector<std::unique_ptr<benchmark_base<benchmark_default>>> instances;
-		instances.push_back(std::make_unique<benchmark_relaxed<4, benchmark_default>>("relaxed"));
-		instances.push_back(std::make_unique<benchmark<lock_fifo<uint64_t>, benchmark_default>>("lock"));
-		instances.push_back(std::make_unique<benchmark<concurrent_fifo<uint64_t>, benchmark_default>>("concurrent"));
-		run_benchmark(instances, { 0.5 }, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
+		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<4, benchmark_default>>("relaxed"));
+		instances.push_back(std::make_unique<benchmark_provider_generic<lock_fifo<uint64_t>, benchmark_default>>("lock"));
+		instances.push_back(std::make_unique<benchmark_provider_generic<concurrent_fifo<uint64_t>, benchmark_default>>("concurrent"));
+		run_benchmark("comp", instances, { 0.5 }, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
 	} else if (OVERRIDE_CHOICE == 2 || (OVERRIDE_CHOICE == 0 && input == 2)) {
-		std::vector<std::unique_ptr<benchmark_base<benchmark_default>>> instances;
-		instances.push_back(std::make_unique<benchmark_relaxed<1, benchmark_default>>("1"));
-		instances.push_back(std::make_unique<benchmark_relaxed<2, benchmark_default>>("2"));
-		instances.push_back(std::make_unique<benchmark_relaxed<4, benchmark_default>>("4"));
-		instances.push_back(std::make_unique<benchmark_relaxed<8, benchmark_default>>("8"));
-		instances.push_back(std::make_unique<benchmark_relaxed<16, benchmark_default>>("16"));
-		run_benchmark(instances, { 0.5 }, { processor_counts.back() }, TEST_ITERATIONS, TEST_TIME_SECONDS);
+		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<1, benchmark_default>>("1"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<2, benchmark_default>>("2"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<4, benchmark_default>>("4"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<8, benchmark_default>>("8"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<16, benchmark_default>>("16"));
+		run_benchmark("block", instances, { 0.5 }, { processor_counts.back() }, TEST_ITERATIONS, TEST_TIME_SECONDS);
 	} else if (OVERRIDE_CHOICE == 3 || (OVERRIDE_CHOICE == 0 && input == 3)) {
-		auto results = benchmark_relaxed<4, benchmark_quality>("quality").test(4, 1, 5, 0.5)[0].results;
+		auto results = benchmark_provider_relaxed<4, benchmark_quality>("quality").test(4, 1, 5, 0.5)[0].results;
 		auto start_time = std::chrono::steady_clock::now();
 		auto total_count = std::accumulate(results.begin(), results.end(), (size_t)0, [](size_t size, const auto& v) { return size + v.size(); });
 		std::vector<std::pair<uint64_t, uint64_t>> pushed_to_popped;
@@ -219,6 +219,14 @@ int main() {
 		});
 		std::cout << "Avg pop error: " << total_diff_doubled / 2.0 / pushed_to_popped.size() << " with " << pushed_to_popped.size() << " elements and a max of " << max << std::endl;
 		std::cout << "Took " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time).count() << "ms";
+	} else if (OVERRIDE_CHOICE == 4 || (OVERRIDE_CHOICE == 0 && input == 4)) {
+		std::vector<std::unique_ptr<benchmark_provider<benchmark_fill>>> instances;
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<4, benchmark_fill>>("relaxed"));
+		run_benchmark("fill", instances, {0}, processor_counts, TEST_ITERATIONS, 0);
+	} else if (OVERRIDE_CHOICE == 5 || (OVERRIDE_CHOICE == 0 && input == 5)) {
+		std::vector<std::unique_ptr<benchmark_provider<benchmark_empty>>> instances;
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<4, benchmark_empty>>("relaxed"));
+		run_benchmark("empty", instances, {1}, processor_counts, TEST_ITERATIONS, 0);
 	}
 
 	return 0;
