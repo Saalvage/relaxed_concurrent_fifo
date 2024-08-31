@@ -48,9 +48,14 @@ private:
 
 	static constexpr state_t set_id(state_t marker, handle_id id) { return (marker ^ 0xff00) | (id << 8); }
 
+	static constexpr size_t EPOCH_MASK = 0b111111;
+
+	static constexpr size_t get_epoch(state_t marker) { return (marker >> 2) & EPOCH_MASK; }
+	size_t window_to_epoch(size_t window) const { return window / window_count; }
+
 	template <bool is_write>
 	state_t make_state(handle_id id, size_t window) const {
-		return (static_cast<state_t>(id) << 8) | (((window / window_count) & 0b111111) << 2) | (!is_write << 1);
+		return (static_cast<state_t>(id) << 8) | ((window_to_epoch(window) & EPOCH_MASK) << 2) | (!is_write << 1);
 	}
 
 	struct alignas(8) header_t {
@@ -406,6 +411,48 @@ public:
 			return true;
 		}
 
+		bool claim_new_block_write_new() {
+			// We will be trying to get a block from this window.
+			uint64_t window_index = fifo.write_window;
+			window_t& window = fifo.buffer[window_index % fifo.window_count];
+
+			auto free_bit = claim_free_bit<true>(window.occupied_set);
+			if (free_bit == std::numeric_limits<size_t>::max()) {
+				if (window_index + 1 - fifo.read_window == fifo.window_count) {
+					// TODO: Maybe consider if the write window already moved?
+					return false;
+				}
+				fifo.write_window.compare_exchange_strong(window_index, window_index + 1);
+				return claim_new_block_write_new();
+			}
+			// Possibilities:
+			// 1. We're in the current write block or in front of the current read block, all good.
+			// 2. We're in the current read block, since the occupied bit was unset this means:
+			// (a) This block is currently being worked on (filled bit still set)
+			// (b) This block was not filled in the previous write block (filled bit unset)
+			// (c) This block has already been emptied fully (filled bit unset as well)
+			// 3. We're behind the read window.
+			// To catch all of these cases we're checking that we're still in the "good" area:
+			if (fifo.read_window >= window_index) {
+				// Pretend like we weren't here.
+				// If we're in an active write window where we don't belong this might result in this block being ignored, but that is ok.
+				// If we're in the active read window... they'll just have to deal with it (problem for future me).
+				window.occupied_set.reset(free_bit);
+				return claim_new_block_write_new();
+			}
+
+			// We have marked the block as having been occupied by a writer.
+			// The occupied bit is set, while the filled bit is not, this implies a new write block claim in progress.
+			write_block = &window.blocks[free_bit];
+			auto& header = write_block->header;
+			state_t state = header.state;
+			assert(!is_active(state));
+			assert(is_write(state)); // TODO ???
+			header.state = write_occ = make_active(fifo.make_state<true>(id, window_index));
+			window.filled_set.set(free_bit);
+			return true;
+		}
+
 	public:
 		bool push(T t) {
 			header_t* header = &write_block->header;
@@ -419,7 +466,7 @@ public:
 					// TODO: Preferable to split the condition again?
 					header->state = write_occ;
 				}
-				if (!claim_new_block_write()) {
+				if (!claim_new_block_write_new()) {
 					return false;
 				}
 				header = &write_block->header;
