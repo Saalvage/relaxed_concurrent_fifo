@@ -157,9 +157,7 @@ int main() {
 	std::cout << "Running in debug mode!" << std::endl;
 #endif // NDEBUG
 
-	//test_consistency<8, 512, 1 << 17, 1 << 20>(0.5);
-
-	namespace fs = std::filesystem;
+	test_consistency<8, 512, 1 << 17, 1 << 20>(0.5);
 
 	std::vector<size_t> processor_counts;
 	for (size_t i = 1; i <= std::thread::hardware_concurrency(); i *= 2) {

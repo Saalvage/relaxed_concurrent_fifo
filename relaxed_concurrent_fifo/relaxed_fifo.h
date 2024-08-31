@@ -55,7 +55,9 @@ private:
 
 	struct alignas(8) header_t {
 		std::atomic<state_t> state;
-		std::atomic_uint16_t curr_index;
+		// read_index < write_index XOR read_index == write_index == 0
+		std::atomic_uint16_t write_index;
+		std::atomic_uint16_t read_index;
 	};
 	static_assert(sizeof(header_t) == 8);
 
@@ -107,7 +109,7 @@ public:
 		for (size_t i = 0; i < window_count; i++) {
 			for (size_t j = 0; j < BLOCKS_PER_WINDOW; j++) {
 				header_t& header = buffer[i].blocks[j].header;
-				std::cout << std::bitset<16>(header.state) << " " << header.curr_index << " | ";
+				std::cout << std::bitset<16>(header.state) << " " << header.read_index << " " << header.write_index << " | ";
 			}
 			std::cout << "\n======================\n";
 		}
@@ -323,7 +325,7 @@ public:
 				auto& my_header = fifo.get_read_window().blocks[free_bit].header;
 				state_t state = my_header.state;
 				if (!is_active(state) && my_header.state.compare_exchange_strong(state, fifo.make_active(fifo.make_state<false>(id, fifo.read_window)))) {
-					if (my_header.curr_index != 0) {
+					if (my_header.read_index != my_header.write_index) {
 						break;
 					} else {
 						// It was emptied in the meantime!
@@ -346,7 +348,7 @@ public:
 							header_t& header = fifo.get_read_window().blocks[idx].header;
 							state_t state = header.state;
 							if (!is_active(state) && header.state.compare_exchange_strong(state, fifo.make_active(fifo.make_state<false>(id, fifo.read_window)))) {
-								if (header.curr_index != 0) {
+								if (header.write_index != 0) {
 									// We managed to steal a block!
 									any_left = false;
 									free_bit = idx;
@@ -397,7 +399,7 @@ public:
 			read_block = &fifo.get_read_window().blocks[free_bit];
 			// TODO: Consider what could happen between claiming the block via the occupied set and setting the id here (if stealing was possible).
 			auto& header = read_block->header;
-			assert(header.curr_index != 0);
+			assert(header.write_index != 0);
 			// The order here is important, we first set the state to active, then decrease the claim counter, otherwise a new window switch might occur inbetween.
 			header.state = fifo.make_active(read_occ);
 			fifo.read_currently_claiming--;
@@ -410,7 +412,7 @@ public:
 			auto expected = write_occ;
 			if (!header->state.compare_exchange_strong(expected, make_active(expected))
 				|| fifo.write_wants_move
-				|| header->curr_index >= CELLS_PER_BLOCK) {
+				|| header->write_index >= CELLS_PER_BLOCK) {
 				// Something happened, someone wants to move the window or our block is full, we get a new block!
 				if (expected == write_occ) {
 					// We only reset the header state if the CAS succeeded (we managed to claim the block).
@@ -423,7 +425,7 @@ public:
 				header = &write_block->header;
 			}
 
-			write_block->cells[header->curr_index++] = std::move(t);
+			write_block->cells[header->write_index++] = std::move(t);
 			
 			header->state = write_occ;
 			return true;
@@ -446,14 +448,16 @@ public:
 				header = &read_block->header;
 			}
 
-			auto&& ret = std::move(read_block->cells[--header->curr_index]);
+			auto&& ret = std::move(read_block->cells[header->read_index++]);
 
 			// We're resetting the filled bit asap so we can avoid a deeper-going check for this block while claiming.
-			if (header->curr_index == 0) {
+			if (header->read_index == header->write_index) {
 				window_t& window = fifo.buffer[read_window % fifo.window_count];
 				auto diff = read_block - window.blocks;
 				window.filled_set.reset(diff);
 				read_block = &dummy_block;
+				// Reset block indices.
+				header->read_index = header->write_index = 0;
 			}
 			
 			header->state = read_occ;
