@@ -206,7 +206,7 @@ public:
 					}
 				}
 				auto new_window = fifo.write_window + 1;
-				if ((new_window - fifo.read_window) % fifo.window_count != 0) {
+				if (new_window - fifo.read_window != fifo.window_count) { // TOOD: Make sure this is actually equivalent to the variant with modulo.
 					fifo.write_window = new_window;
 				} else {
 					// Whelp, we're out of luck here! Can't force forward the read window.
@@ -448,7 +448,7 @@ public:
 				header = &read_block->header;
 			}
 
-			auto&& ret = std::move(read_block->cells[header->read_index++]);
+			auto&& ret = std::move(read_block->cells[header->read_index++].load());
 
 			// We're resetting the filled bit asap so we can avoid a deeper-going check for this block while claiming.
 			if (header->read_index == header->write_index) {
