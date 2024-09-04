@@ -128,7 +128,7 @@ public:
 
 		// Doing it like this allows the push code to grab a new block instead of requiring special cases for first-time initialization.
 		// An already active block will always trigger a check.
-		static inline block_t dummy_block{header_t{0, make_active(0)}, {}};
+		static inline block_t dummy_block{header_t{0, make_active(0), 0}, {}};
 	
 		block_t* read_block = &dummy_block;
 		block_t* write_block = &dummy_block;
@@ -495,7 +495,7 @@ public:
 				header = &read_block->header;
 			}
 
-			auto&& ret = std::move(read_block->cells[header->read_index++].load());
+			T ret = std::move(read_block->cells[header->read_index++].load());
 
 			// We're resetting the filled bit asap so we can avoid a deeper-going check for this block while claiming.
 			if (header->read_index == header->write_index) {
