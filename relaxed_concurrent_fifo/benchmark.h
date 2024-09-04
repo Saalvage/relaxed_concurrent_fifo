@@ -110,7 +110,7 @@ struct benchmark_fill {
 	benchmark_fill(size_t num_threads) : results(num_threads) { }
 
 	template <typename T>
-	void per_thread(size_t thread_index, T& fifo, std::barrier<>& a, std::atomic_bool& over) {
+	void per_thread(size_t thread_index, T& fifo, std::barrier<>& a, std::atomic_bool&) {
 		auto handle = fifo.get_handle();
 		a.arrive_and_wait();
 		while (handle.push(thread_index)) {
@@ -126,7 +126,7 @@ struct benchmark_fill {
 
 struct benchmark_empty : benchmark_fill {
 	template <typename T>
-	void per_thread(size_t thread_index, T& fifo, std::barrier<>& a, std::atomic_bool& over) {
+	void per_thread(size_t thread_index, T& fifo, std::barrier<>& a, std::atomic_bool&) {
 		auto handle = fifo.get_handle();
 		a.arrive_and_wait();
 		while (handle.pop().has_value()) {
