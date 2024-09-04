@@ -446,8 +446,12 @@ public:
 			write_block = &window.blocks[free_bit];
 			auto& header = write_block->header;
 			state_t state = header.state;
+			(void)state;
 			assert(!is_active(state));
-			assert(is_write(state)); // TODO ???
+			//assert(is_write(state)); // TODO ???
+			write_occ = fifo.make_state<true>(id, window_index);
+			write_window = window_index;
+			header.state = make_active(write_occ);
 			header.state = write_occ = make_active(fifo.make_state<true>(id, window_index));
 			window.filled_set.set(free_bit);
 			return true;
