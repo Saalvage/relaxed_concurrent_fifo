@@ -165,7 +165,7 @@ int main() {
 	}
 
 	constexpr int OVERRIDE_CHOICE = 0;
-	constexpr int TEST_ITERATIONS = 1;
+	constexpr int TEST_ITERATIONS = 5;
 	constexpr int TEST_TIME_SECONDS = 5;
 
 	int input;
@@ -187,39 +187,11 @@ int main() {
 		instances.push_back(std::make_unique<benchmark_provider_relaxed<4, benchmark_default>>("4"));
 		instances.push_back(std::make_unique<benchmark_provider_relaxed<8, benchmark_default>>("8"));
 		instances.push_back(std::make_unique<benchmark_provider_relaxed<16, benchmark_default>>("16"));
-		run_benchmark("block", instances, { 0.5 }, { processor_counts.back() }, TEST_ITERATIONS, TEST_TIME_SECONDS);
+		run_benchmark("block", instances, {0.5}, { processor_counts.back() }, TEST_ITERATIONS, TEST_TIME_SECONDS);
 	} else if (OVERRIDE_CHOICE == 3 || (OVERRIDE_CHOICE == 0 && input == 3)) {
-		auto results = benchmark_provider_relaxed<4, benchmark_quality>("quality").test(4, 1, 5, 0.5)[0].results;
-		auto start_time = std::chrono::steady_clock::now();
-		auto total_count = std::accumulate(results.begin(), results.end(), (size_t)0, [](size_t size, const auto& v) { return size + v.size(); });
-		std::vector<std::pair<uint64_t, uint64_t>> pushed_to_popped;
-		pushed_to_popped.reserve(total_count);
-		std::vector<uint64_t> popped_vec;
-		popped_vec.reserve(total_count);
-		for (const auto& thread_result : results) {
-			for (const auto& [pushed, popped] : thread_result) {
-				pushed_to_popped.emplace_back(pushed, popped);
-				popped_vec.emplace_back(popped);
-			}
-		}
-		std::sort(std::execution::par_unseq, pushed_to_popped.begin(), pushed_to_popped.end());
-		std::sort(std::execution::par_unseq, popped_vec.begin(), popped_vec.end());
-		std::atomic_uint64_t max = 0;
-		// We're using the doubled diff because when there are multiple of the same pop timing
-		// we're adding the average index which would require using floating point values.
-		uint64_t total_diff_doubled = std::transform_reduce(std::execution::par_unseq, pushed_to_popped.begin(), pushed_to_popped.end(), 0ull, std::plus<uint64_t>(), [&](const auto& pair) {
-			uint64_t i = &pair - &pushed_to_popped[0];
-			auto& [pushed, popped] = pair;
-			auto [popped_min, popped_max] = std::equal_range(popped_vec.begin(), popped_vec.end(), popped);
-			uint64_t popped_index_max = popped_max - popped_vec.begin();
-			uint64_t max_new = popped_index_max > i ? popped_index_max - i : i - popped_index_max;
-			uint64_t max_curr = max;
-			while (max_curr < max_new && !max.compare_exchange_strong(max_curr, max_new)) { }
-			uint64_t popped_index_doubled = 2 * (popped_min - popped_vec.begin()) + (popped_max - popped_min);
-			return popped_index_doubled > 2 * i ? popped_index_doubled - 2 * i : 2 * i - popped_index_doubled;
-		});
-		std::cout << "Avg pop error: " << total_diff_doubled / 2.0 / pushed_to_popped.size() << " with " << pushed_to_popped.size() << " elements and a max of " << max << std::endl;
-		std::cout << "Took " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start_time).count() << "ms";
+		std::vector<std::unique_ptr<benchmark_provider<benchmark_quality>>> instances;
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<4, benchmark_quality>>("relaxed"));
+		run_benchmark("quality", instances, {0.5}, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
 	} else if (OVERRIDE_CHOICE == 4 || (OVERRIDE_CHOICE == 0 && input == 4)) {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_fill>>> instances;
 		instances.push_back(std::make_unique<benchmark_provider_relaxed<4, benchmark_fill>>("relaxed"));
