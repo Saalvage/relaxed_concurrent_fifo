@@ -452,8 +452,99 @@ public:
 			write_occ = fifo.make_state<true>(id, window_index);
 			write_window = window_index;
 			header.state = make_active(write_occ);
-			header.state = write_occ = make_active(fifo.make_state<true>(id, window_index));
 			window.filled_set.set(free_bit);
+			return true;
+		}
+
+		bool claim_new_block_read_new() {
+			// We will be trying to get a block from this window.
+			uint64_t window_index = fifo.read_window;
+			// TODO: We can't be sure that this isn't the window of the next epoch.. Epochize the windows?? (Alternative: Check epoch of block before claiming.)
+			window_t& window = fifo.buffer[window_index % fifo.window_count];
+
+			auto free_bit = claim_free_bit<false>(window.occupied_set);
+			if (free_bit == std::numeric_limits<size_t>::max()) {
+				// We need to steal.
+				// We need to check if there are any blocks with elements still present!
+				auto& bits = window.filled_set;
+				auto off = dist(rng);
+				bool any_left;
+				do {
+					any_left = false;
+					for (size_t i = 0; i < bits.size(); i++) {
+						auto idx = (i + off) % bits.size();
+						if (bits[idx]) {
+							header_t& header = window.blocks[idx].header;
+							state_t state = header.state;
+							if (!is_active(state) && header.state.compare_exchange_strong(state, fifo.make_active(fifo.make_state<false>(id, window_index)))) {
+								if (header.write_index != 0) {
+									// We managed to steal a block!
+									read_occ = fifo.make_state<false>(id, window_index);
+									read_block = &window.blocks[idx];
+									read_window = window_index;
+									return true;
+								} else {
+									// It was emptied in the meantime!
+									header.state = fifo.make_inactive(header.state); // TODO: Is this correct?? I think it needs to be CAS!
+								} 
+							} else {
+								// The block is active or got stolen by someone else, we'll look for another one and eventually return if we fail!
+								any_left = true;
+							}
+						}
+					}
+				} while (any_left);
+
+				// No more blocks left, we can finally move!
+				// TODO: Is this check here sufficient and/or necessary? Theoretically we're checking both conditions above so it seems to be a timing thing.
+				if (!fifo.buffer[window_index % fifo.window_count].filled_set.any() && !fifo.buffer[window_index % fifo.window_count].occupied_set.any()) {
+					uint64_t write_window = fifo.write_window;
+					if (window_index + 1 == write_window) {
+						// We can't be sure that the window we're checking here is the correct one, however:
+						// False positive: The window is already advanced, CAS fails either way.
+						// False negative: See else-if branch below.
+						if (fifo.buffer[write_window % fifo.window_count].filled_set.any()) {
+							// We make sure that if the condition above was a false positive we're not 
+							fifo.write_window.compare_exchange_strong(write_window, write_window + 1);
+						// Make sure it's actually the correct window that is empty and not a false negative.
+						} else if (write_window == fifo.write_window) {
+							/*if (fifo.buffer[(window_index - 1) % fifo.window_count].filled_set.any()) {
+								// Oops, we missed one :3
+								fifo.read_window.compare_exchange_strong(window_index, write_window - 1);
+								std::cout << "OOPS" << std::endl;
+							}
+							std::cout << fifo.buffer[(window_index - 3) % fifo.window_count].filled_set.any() << " " << fifo.buffer[(read_window - 2) % fifo.window_count].filled_set.any() << std::endl;
+							*/
+							test++;
+							if (test > 1000) {
+								fifo.debug_print();
+							}
+							return false;
+						}
+					}
+					fifo.read_window.compare_exchange_strong(window_index, window_index + 1);
+					// Try again with new window.
+					return claim_new_block_read_new();
+				} else {
+					return claim_new_block_read_new();
+				}
+			}
+
+			block_t& block = window.blocks[free_bit];
+			header_t& header = block.header;
+			state_t state = header.state;
+			if (is_active(state) || !window.occupied_set[free_bit]) {
+				// If the occupied bit isn't set either this was an attempted write claim in an outdated window OR the block was stolen and emptied in the meantime.
+				// TODO: Rethinkg. Do we need a whole retry?
+				return claim_new_block_read_new();
+			}
+			if (!header.state.compare_exchange_strong(state, make_active(fifo.make_state<false>(id, window_index)))) {
+				// TODO: Rethinkg. Do we need a whole retry?
+				return claim_new_block_read_new();
+			}
+			read_block = &block;
+			read_occ = fifo.make_state<false>(id, window_index);
+			read_window = window_index;
 			return true;
 		}
 
@@ -462,7 +553,6 @@ public:
 			header_t* header = &write_block->header;
 			auto expected = write_occ;
 			if (!header->state.compare_exchange_strong(expected, make_active(expected))
-				|| fifo.write_wants_move
 				|| header->write_index >= CELLS_PER_BLOCK) {
 				// Something happened, someone wants to move the window or our block is full, we get a new block!
 				if (expected == write_occ) {
@@ -477,23 +567,22 @@ public:
 			}
 
 			write_block->cells[header->write_index++] = std::move(t);
-			
+
+			if (fifo.read_window > write_window) {
+				std::cout << "AAAAAAAAAAA" << std::endl;
+			}
+
 			header->state = write_occ;
+
 			return true;
 		}
 
 		std::optional<T> pop() {
 			header_t* header = &read_block->header;
 			auto expected = read_occ;
-			if (!header->state.compare_exchange_strong(expected, make_active(expected))
-				|| fifo.read_wants_move) {
+			if (!header->state.compare_exchange_strong(expected, make_active(expected))) {
 				// Something happened, someone wants to move the window or our block is full, we get a new block!
-				if (expected == read_occ) { // TODO: I don't think this is allowed!!!
-					// We only reset the header state if the CAS succeeded (we managed to claim the block).
-					// TODO: Preferable to split the method again?
-					header->state = read_occ;
-				}
-				if (!claim_new_block_read()) {
+				if (!claim_new_block_read_new()) {
 					return std::nullopt;
 				}
 				header = &read_block->header;
