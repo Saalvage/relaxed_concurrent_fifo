@@ -30,18 +30,29 @@ class atomic_bitset {
 private:
     std::array<std::atomic<uint64_t>, N / 64 + (N % 64 ? 1 : 0)> data;
 
+    template <size_t BIT_COUNT>
+    struct min_fit_int {
+        using type = std::conditional_t<BIT_COUNT <= 8, uint8_t,
+            std::conditional_t<BIT_COUNT <= 16, uint16_t,
+            std::conditional_t<BIT_COUNT <= 32, uint32_t,
+            uint64_t>>>;
+    };
+
     static inline thread_local std::random_device dev;
     static inline thread_local std::minstd_rand rng{ dev() };
     static inline thread_local std::uniform_int_distribution dist{ 0, static_cast<int>(N - 1) };
 
     template <bool IS_SET>
     static constexpr size_t claim_bit_singular(std::atomic<uint64_t>& data) {
+        using actual_type = typename min_fit_int<N>::type;
+        constexpr size_t actual_size = sizeof(actual_type) * 8;
+
         auto initial_rot = dist(rng);
-        auto rotated = std::rotr<uint64_t>(data, initial_rot);
+        auto rotated = std::rotr(static_cast<actual_type>(data), initial_rot);
         int counted;
-        for (int i = 0; i < 64; i += counted) {
+        for (int i = 0; i < actual_size; i += counted) {
             counted = IS_SET ? std::countr_zero(rotated) : std::countr_one(rotated);
-            auto original_index = (initial_rot + i + counted) % 64;
+            auto original_index = (initial_rot + i + counted) % actual_size;
             if (set_bit_atomic<!IS_SET>(data, original_index)) {
                 return original_index;
             }

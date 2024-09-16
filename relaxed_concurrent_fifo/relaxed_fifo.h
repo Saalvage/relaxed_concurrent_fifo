@@ -416,7 +416,7 @@ public:
 			uint64_t window_index = fifo.write_window;
 			window_t& window = fifo.buffer[window_index % fifo.window_count];
 
-			auto free_bit = window.occupied_set.template claim_bit<true>();
+			auto free_bit = window.occupied_set.template claim_bit<false>();
 			if (free_bit == std::numeric_limits<size_t>::max()) {
 				if (window_index + 1 - fifo.read_window == fifo.window_count) {
 					// TODO: Maybe consider if the write window already moved?
