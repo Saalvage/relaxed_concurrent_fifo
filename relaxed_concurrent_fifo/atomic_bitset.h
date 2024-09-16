@@ -25,11 +25,12 @@ constexpr bool set_bit_atomic(std::atomic<T>& data, size_t index) {
     return true;
 }
 
-template <size_t N>
+template <size_t N, typename ARR_TYPE = uint8_t>
 class atomic_bitset {
 private:
-    static constexpr size_t array_members = N / 64 + (N % 64 ? 1 : 0);
-    std::array<std::atomic<uint64_t>, array_members> data;
+    static constexpr size_t bit_count = sizeof(ARR_TYPE) * 8;
+    static constexpr size_t array_members = N / bit_count + (N % bit_count ? 1 : 0);
+    std::array<std::atomic<ARR_TYPE>, array_members> data;
 
     template <size_t BIT_COUNT>
     struct min_fit_int {
@@ -45,8 +46,8 @@ private:
     static inline thread_local std::uniform_int_distribution dist_outer{ 0, static_cast<int>(array_members - 1) };
 
     template <bool IS_SET>
-    static constexpr size_t claim_bit_singular(std::atomic<uint64_t>& data, int initial_rot) {
-        using actual_type = typename min_fit_int<N>::type;
+    static constexpr size_t claim_bit_singular(std::atomic<ARR_TYPE>& data, int initial_rot) {
+        using actual_type = std::conditional_t<(N > sizeof(ARR_TYPE)), typename min_fit_int<N>::type, ARR_TYPE>;
         constexpr size_t actual_size = sizeof(actual_type) * 8;
 
         auto rotated = std::rotr(static_cast<actual_type>(data), initial_rot);
@@ -73,7 +74,7 @@ public:
     /// <returns>Whether the bit has been newly set. false means the bit had already been set.</returns>
     constexpr bool set(size_t index) {
         assert(index < size());
-        return set_bit_atomic<true>(data[index / 64], index % 64);
+        return set_bit_atomic<true>(data[index / bit_count], index % bit_count);
     }
 
     /// <summary>
@@ -83,12 +84,12 @@ public:
     /// <returns>Whether the bit has been newly set. false means the bit had already been set.</returns>
     constexpr bool reset(size_t index) {
         assert(index < size());
-        return set_bit_atomic<false>(data[index / 64], index % 64);
+        return set_bit_atomic<false>(data[index / bit_count], index % bit_count);
     }
 
     constexpr bool test(size_t index, std::memory_order order = std::memory_order_seq_cst) const {
         assert(index < size());
-        return data[index / 64].load(order) & (1ull << (index % 64));
+        return data[index / bit_count].load(order) & (1ull << (index % bit_count));
     }
 
     constexpr bool operator[](size_t index) const {
@@ -116,7 +117,7 @@ public:
         for (size_t i = 0; i < data.size(); i++) {
             auto index = (i + off) % data.size();
             if (auto ret = claim_bit_singular<IS_SET>(data[index], initial_rot); ret != std::numeric_limits<size_t>::max()) {
-                return ret + index * 64;
+                return ret + index * bit_count;
             }
         }
         return std::numeric_limits<size_t>::max();
