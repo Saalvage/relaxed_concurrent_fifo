@@ -175,15 +175,15 @@ int main() {
 	std::cout << "Running in debug mode!" << std::endl;
 #endif // NDEBUG
 
-	//test_consistency<8, 512, 1 << 17, 1 << 20>(0.5);
+	//test_consistency<8, 512, 1 << 17, 1 << 20>(0);
 
 	std::vector<size_t> processor_counts;
-	for (size_t i = 1; i <= std::thread::hardware_concurrency(); i *= 2) {
+	for (size_t i = 1; i <= std::thread::hardware_concurrency() - 1; i *= 2) {
 		processor_counts.emplace_back(i);
 	}
 
 	constexpr int OVERRIDE_CHOICE = 0;
-	constexpr int TEST_ITERATIONS = 5;
+	constexpr int TEST_ITERATIONS = 1;
 	constexpr int TEST_TIME_SECONDS = 5;
 
 	int input;
@@ -219,6 +219,9 @@ int main() {
 		instances.push_back(std::make_unique<benchmark_provider_relaxed<4, benchmark_empty>>("relaxed"));
 		run_benchmark("empty", instances, {1}, processor_counts, TEST_ITERATIONS, 0);
 	}
+
+	std::cout << "Done" << std::endl;
+	std::this_thread::sleep_for(std::chrono::hours(44444444));
 
 	return 0;
 }
