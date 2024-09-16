@@ -515,10 +515,6 @@ public:
 							}
 							std::cout << fifo.buffer[(window_index - 3) % fifo.window_count].filled_set.any() << " " << fifo.buffer[(read_window - 2) % fifo.window_count].filled_set.any() << std::endl;
 							*/
-							test++;
-							if (test > 1000) {
-								fifo.debug_print();
-							}
 							return false;
 						}
 					}
