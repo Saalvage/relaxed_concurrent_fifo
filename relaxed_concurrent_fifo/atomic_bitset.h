@@ -28,7 +28,8 @@ constexpr bool set_bit_atomic(std::atomic<T>& data, size_t index) {
 template <size_t N>
 class atomic_bitset {
 private:
-    std::array<std::atomic<uint64_t>, N / 64 + (N % 64 ? 1 : 0)> data;
+    static constexpr size_t array_members = N / 64 + (N % 64 ? 1 : 0);
+    std::array<std::atomic<uint64_t>, array_members> data;
 
     template <size_t BIT_COUNT>
     struct min_fit_int {
@@ -40,14 +41,14 @@ private:
 
     static inline thread_local std::random_device dev;
     static inline thread_local std::minstd_rand rng{ dev() };
-    static inline thread_local std::uniform_int_distribution dist{ 0, static_cast<int>(N - 1) };
+    static inline thread_local std::uniform_int_distribution dist_inner{ 0, static_cast<int>(N - 1) };
+    static inline thread_local std::uniform_int_distribution dist_outer{ 0, static_cast<int>(array_members - 1) };
 
     template <bool IS_SET>
-    static constexpr size_t claim_bit_singular(std::atomic<uint64_t>& data) {
+    static constexpr size_t claim_bit_singular(std::atomic<uint64_t>& data, int initial_rot) {
         using actual_type = typename min_fit_int<N>::type;
         constexpr size_t actual_size = sizeof(actual_type) * 8;
 
-        auto initial_rot = dist(rng);
         auto rotated = std::rotr(static_cast<actual_type>(data), initial_rot);
         int counted;
         for (int i = 0; i < actual_size; i += counted) {
@@ -105,9 +106,17 @@ public:
 
     template <bool IS_SET>
     constexpr size_t claim_bit() {
+        int off;
+        if constexpr (array_members > 1) {
+            off = dist_outer(rng);
+        } else {
+            off = 0;
+        }
+        auto initial_rot = dist_inner(rng);
         for (size_t i = 0; i < data.size(); i++) {
-            if (auto ret = claim_bit_singular<IS_SET>(data[i]); ret != std::numeric_limits<size_t>::max()) {
-                return ret + i * 64;
+            auto index = (i + off) % data.size();
+            if (auto ret = claim_bit_singular<IS_SET>(data[index], initial_rot); ret != std::numeric_limits<size_t>::max()) {
+                return ret + index * 64;
             }
         }
         return std::numeric_limits<size_t>::max();
