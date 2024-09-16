@@ -7,15 +7,6 @@
 #include <atomic>
 #include <cassert>
 
-template <size_t BIT_COUNT>
-struct min_fit_int {
-    using type = std::conditional_t<BIT_COUNT <= 8, uint8_t,
-                     std::conditional_t<BIT_COUNT <= 16, uint16_t,
-                         std::conditional_t<BIT_COUNT <= 32, uint32_t,
-                             std::conditional_t<BIT_COUNT <= 64, uint64_t,
-                                 void>>>>;
-};
-
 template <bool SET, typename T>
 constexpr bool set_bit_atomic(std::atomic<T>& data, size_t index) {
     T old_val;
@@ -37,12 +28,28 @@ constexpr bool set_bit_atomic(std::atomic<T>& data, size_t index) {
 template <size_t N>
 class atomic_bitset {
 private:
-    using internal_type = typename min_fit_int<N>::type;
+    std::array<std::atomic<uint64_t>, N / 64 + (N % 64 ? 1 : 0)> data;
 
-    // TODO: Is it preferable to always have an array of bytes since it gives greater granularity to the atomics?
-    std::conditional_t<N <= 64, std::atomic<internal_type>, std::array<std::atomic<uint8_t>, N / 8 + (N % 8 ? 1 : 0)>> data;
+    static inline thread_local std::random_device dev;
+    static inline thread_local std::minstd_rand rng{ dev() };
+    static inline thread_local std::uniform_int_distribution dist{ 0, static_cast<int>(N - 1) };
 
-    static constexpr bool uses_array = N > 64;
+    template <bool IS_SET>
+    static constexpr size_t claim_bit_singular(std::atomic<uint64_t>& data) {
+        auto initial_rot = dist(rng);
+        auto rotated = std::rotr<uint64_t>(data, initial_rot);
+        int counted;
+        for (int i = 0; i < 64; i += counted) {
+            counted = IS_SET ? std::countr_zero(rotated) : std::countr_one(rotated);
+            auto original_index = (initial_rot + i + counted) % 64;
+            if (set_bit_atomic<!IS_SET>(data, original_index)) {
+                return original_index;
+            }
+            rotated >>= ++counted;
+        }
+
+        return std::numeric_limits<size_t>::max();
+    }
 
 public:
     static constexpr size_t size() { return N; }
@@ -54,11 +61,7 @@ public:
     /// <returns>Whether the bit has been newly set. false means the bit had already been set.</returns>
     constexpr bool set(size_t index) {
         assert(index < size());
-        if constexpr (uses_array) {
-            return set_bit_atomic<true>(data[index / 8], index % 8);
-        } else if constexpr (!uses_array) {
-            return set_bit_atomic<true>(data, index);
-        }
+        return set_bit_atomic<true>(data[index / 64], index % 64);
     }
 
     /// <summary>
@@ -68,20 +71,12 @@ public:
     /// <returns>Whether the bit has been newly set. false means the bit had already been set.</returns>
     constexpr bool reset(size_t index) {
         assert(index < size());
-        if constexpr (uses_array) {
-            return set_bit_atomic<false>(data[index / 8], index % 8);
-        } else if constexpr (!uses_array) {
-            return set_bit_atomic<false>(data, index);
-        }
+        return set_bit_atomic<false>(data[index / 64], index % 64);
     }
 
     constexpr bool test(size_t index, std::memory_order order = std::memory_order_seq_cst) const {
         assert(index < size());
-        if constexpr (uses_array) {
-            return data[index / 8].load(order) & (1 << (index % 8));
-        } else if constexpr (!uses_array) {
-            return data.load(order) & (1ull << index);
-        }
+        return data[index / 64].load(order) & (1ull << (index % 64));
     }
 
     constexpr bool operator[](size_t index) const {
@@ -89,16 +84,22 @@ public:
     }
 
     constexpr bool any() const {
-        if constexpr (uses_array) {
-            for (auto& elem : data) {
-                if (elem) {
-                    return true;
-                }
+        for (auto& elem : data) {
+            if (elem) {
+                return true;
             }
-            return false;
-        } else {
-            return data;
         }
+        return false;
+    }
+
+    template <bool IS_SET>
+    constexpr size_t claim_bit() {
+        for (size_t i = 0; i < data.size(); i++) {
+            if (auto ret = claim_bit_singular<IS_SET>(data[i]); ret != std::numeric_limits<size_t>::max()) {
+                return ret + i * 64;
+            }
+        }
+        return std::numeric_limits<size_t>::max();
     }
 };
 
