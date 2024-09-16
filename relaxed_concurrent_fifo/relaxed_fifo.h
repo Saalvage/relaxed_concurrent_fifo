@@ -150,7 +150,7 @@ public:
 		friend relaxed_fifo;
 
 		std::random_device dev;
-		std::mt19937 rng{dev()};
+		std::minstd_rand rng{dev()};
 		// TODO: Check template parameter here.
 		std::uniform_int_distribution<size_t> dist{0, BLOCKS_PER_WINDOW - 1};
 
@@ -416,7 +416,7 @@ public:
 			uint64_t window_index = fifo.write_window;
 			window_t& window = fifo.buffer[window_index % fifo.window_count];
 
-			auto free_bit = claim_free_bit<true>(window.occupied_set);
+			auto free_bit = window.occupied_set.template claim_bit<true>();
 			if (free_bit == std::numeric_limits<size_t>::max()) {
 				if (window_index + 1 - fifo.read_window == fifo.window_count) {
 					// TODO: Maybe consider if the write window already moved?

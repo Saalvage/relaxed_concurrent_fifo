@@ -126,6 +126,24 @@ void test_consistency(double prefill) {
 	}
 }
 
+void test_continuous_bitset_claim() {
+	auto gen = std::bind(std::uniform_int_distribution<>(0, 1), std::default_random_engine());
+	while (true) {
+		atomic_bitset<128> a;
+		std::vector<bool> b(128);
+		for (int i = 0; i < 128; i++) {
+			if (gen()) {
+				a.set(i);
+				b[i] = true;
+			}
+		}
+		auto result = a.claim_bit<true>();
+		if (a[result] || !b[result]) {
+			throw std::runtime_error("Incorrect!");
+		}
+	}
+}
+
 template <typename BENCHMARK>
 void run_benchmark(const std::string& test_name, const std::vector<std::unique_ptr<benchmark_provider<BENCHMARK>>>& instances, const std::vector<double>& prefill_amounts,
 	const std::vector<size_t>& processor_counts, int test_iterations, int test_time_seconds) {
