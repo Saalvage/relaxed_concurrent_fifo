@@ -34,7 +34,7 @@ private:
     static inline thread_local std::minstd_rand rng{ dev() };
     static inline thread_local std::uniform_int_distribution dist{ 0, static_cast<int>(N - 1) };
 
-    template <bool IS_SET>
+    template <bool IS_SET, bool WRITE>
     static constexpr size_t claim_bit_singular(std::atomic<uint64_t>& data) {
         auto initial_rot = dist(rng);
         auto rotated = std::rotr<uint64_t>(data, initial_rot);
@@ -42,7 +42,11 @@ private:
         for (int i = 0; i < 64; i += counted) {
             counted = IS_SET ? std::countr_zero(rotated) : std::countr_one(rotated);
             auto original_index = (initial_rot + i + counted) % 64;
-            if (set_bit_atomic<!IS_SET>(data, original_index)) {
+            if constexpr (WRITE) {
+                if (set_bit_atomic<!IS_SET>(data, original_index)) {
+                    return original_index;
+                }
+            } else {
                 return original_index;
             }
             rotated >>= ++counted;
@@ -92,10 +96,10 @@ public:
         return false;
     }
 
-    template <bool IS_SET>
+    template <bool IS_SET, bool WRITE>
     constexpr size_t claim_bit() {
         for (size_t i = 0; i < data.size(); i++) {
-            if (auto ret = claim_bit_singular<IS_SET>(data[i]); ret != std::numeric_limits<size_t>::max()) {
+            if (auto ret = claim_bit_singular<IS_SET, WRITE>(data[i]); ret != std::numeric_limits<size_t>::max()) {
                 return ret + i * 64;
             }
         }

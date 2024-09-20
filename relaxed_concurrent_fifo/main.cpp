@@ -137,7 +137,7 @@ void test_continuous_bitset_claim() {
 				b[i] = true;
 			}
 		}
-		auto result = a.claim_bit<true>();
+		auto result = a.claim_bit<true, true>();
 		if (a[result] || !b[result]) {
 			throw std::runtime_error("Incorrect!");
 		}
@@ -176,6 +176,17 @@ int main() {
 #endif // NDEBUG
 
 	//test_consistency<8, 512, 1 << 17, 1 << 20>(0);
+
+	atomic_bitset<8> aaaaaa;
+	aaaaaa.template claim_bit<false, true>();
+
+	auto fff = relaxed_fifo<uint64_t>(200);
+	auto handle = fff.get_handle();
+	for (int i = 0; i < 7 * 8; i++) {
+		handle.push(2);
+	}
+	fff.debug_print();
+	handle.push(2);
 
 	std::vector<size_t> processor_counts;
 	for (size_t i = 1; i <= std::thread::hardware_concurrency() - 1; i *= 2) {
