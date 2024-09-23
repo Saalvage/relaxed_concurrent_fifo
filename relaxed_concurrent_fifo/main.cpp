@@ -87,7 +87,7 @@ void test_consistency(double prefill) {
 			auto handle = fifo.get_handle();
 			a.arrive_and_wait();
 			for (uint64_t j = 0; j < PER_THREAD_ELEMENTS; j++) {
-				auto val = (i << 32) | j;
+				auto val = (i << 32) | j + 1;
 				test[i].push_back(val);
 				while (!handle.push(val)) {}
 				std::optional<uint64_t> pop;
@@ -175,18 +175,7 @@ int main() {
 	std::cout << "Running in debug mode!" << std::endl;
 #endif // NDEBUG
 
-	//test_consistency<8, 512, 1 << 17, 1 << 20>(0);
-
-	atomic_bitset<8> aaaaaa;
-	aaaaaa.template claim_bit<false, true>();
-
-	auto fff = relaxed_fifo<uint64_t>(200);
-	auto handle = fff.get_handle();
-	for (int i = 0; i < 7 * 8; i++) {
-		handle.push(2);
-	}
-	fff.debug_print();
-	handle.push(2);
+	test_consistency<1, 2, 2000, 2000>(0.5);
 
 	std::vector<size_t> processor_counts;
 	for (size_t i = 1; i <= std::thread::hardware_concurrency() - 1; i *= 2) {

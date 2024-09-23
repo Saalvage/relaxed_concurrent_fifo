@@ -75,9 +75,9 @@ public:
 		}
 		read_window = window_count;
 		write_window = window_count + 1;
-		for (int i = 0; i < window_count; i++) {
+		for (size_t i = 0; i < window_count; i++) {
 			window_t& window = buffer[i];
-			for (int j = 0; j < BLOCKS_PER_WINDOW; j++) {
+			for (size_t j = 0; j < BLOCKS_PER_WINDOW; j++) {
 				header_t& header = window.blocks[j].header;
 				header.read_started_index_and_epoch = static_cast<uint32_t>(window_count + i) << 16;
 				header.write_index_and_epoch = header.read_started_index_and_epoch + 1;
@@ -91,7 +91,7 @@ public:
 		for (size_t i = 0; i < window_count; i++) {
 			for (size_t j = 0; j < BLOCKS_PER_WINDOW; j++) {
 				header_t& header = buffer[i].blocks[j].header;
-				std::cout << std::bitset<16>(header.write_index_and_epoch) << " | ";
+				std::cout << std::bitset<32>(header.read_started_index_and_epoch) << " | ";
 			}
 			std::cout << "\n======================\n";
 		}
@@ -105,7 +105,7 @@ public:
 
 		// Doing it like this allows the push code to grab a new block instead of requiring special cases for first-time initialization.
 		// An already active block will always trigger a check.
-		static inline block_t dummy_block{header_t{1 << 16, 0, 0}, {}};
+		static inline block_t dummy_block{header_t{1 << 16, 1 << 16, 0}, {}};
 	
 		block_t* read_block = &dummy_block;
 		block_t* write_block = &dummy_block;
@@ -145,20 +145,18 @@ public:
 			do {
 				window_index = fifo.write_window;
 				window = &fifo.buffer[window_index % fifo.window_count];
-				free_bit = window->filled_set.template claim_bit<false, true>();
-				std::cout << free_bit << std::endl;
+				free_bit = claim_free_bit<true, true>(window->filled_set);
 				if (free_bit == std::numeric_limits<size_t>::max()) {
 					// No more free bits, we move.
-					if (fifo.read_window == window_index + 1) {
+					if (window_index + 1 - fifo.read_window == fifo.window_count) {
 						return false;
 					}
 					fifo.write_window.compare_exchange_strong(window_index, window_index + 1);
-					std::cout << "NEW WEINDOW" << std::endl;
 				} else {
 					break;
 				}
 			} while (true);
-			
+
 			write_window = window_index;
 			write_block = &window->blocks[free_bit];
 			return true;
@@ -171,7 +169,7 @@ public:
 			do {
 				window_index = fifo.read_window;
 				window = &fifo.buffer[window_index % fifo.window_count];
-				free_bit = window->filled_set.template claim_bit<true, false>();
+				free_bit = claim_free_bit<false, false>(window->filled_set);
 				if (free_bit == std::numeric_limits<size_t>::max()) {
 					// TODO: I don't like this.
 					// Before we move, let's invalidate all write epochs in the blocks.
@@ -215,10 +213,12 @@ public:
 
 	public:
 		bool push(T t) {
+			assert(t != 0);
+
 			header_t* header = &write_block->header;
 			uint32_t wie = header->write_index_and_epoch;
 			uint16_t index;
-			if ((wie >> 16) != write_window || (index = (wie & 0xffff)) >= CELLS_PER_BLOCK || !header->write_index_and_epoch.compare_exchange_strong(wie, wie + 1)) {
+			if ((wie >> 16) != (write_window & 0xffff) || (index = (wie & 0xffff)) >= CELLS_PER_BLOCK || !header->write_index_and_epoch.compare_exchange_strong(wie, wie + 1)) {
 				if (!claim_new_block_write()) {
 					return false;
 				}
@@ -234,8 +234,9 @@ public:
 			header_t* header = &read_block->header;
 			uint32_t rie = header->read_started_index_and_epoch;
 			uint32_t index;
+
 			do {
-				if ((rie >> 16) != read_window || (index = (rie & 0xffff)) >= (header->write_index_and_epoch & 0xffff)) {
+				if ((rie >> 16) != (read_window & 0xffff) || (index = (rie & 0xffff)) >= (header->write_index_and_epoch & 0xffff)) {
 					if (!claim_new_block_read()) {
 						return false;
 					}
@@ -253,11 +254,11 @@ public:
 				window_t& window = fifo.buffer[read_window % fifo.window_count];
 				auto diff = read_block - window.blocks;
 				window.filled_set.reset(diff);
-				read_window = 0; // Invalidate read window.
 				// Increase epoch.
 				header->read_started_index_and_epoch = static_cast<uint32_t>(read_window + fifo.window_count) << 16;
 
 				header->read_finished_index = 0;
+				read_window = 0; // Invalidate read window. TODO: I don't think this works in all cases.
 			}
 
 			return ret;

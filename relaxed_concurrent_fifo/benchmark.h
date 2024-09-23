@@ -113,9 +113,10 @@ struct benchmark_fill {
 	void per_thread(size_t thread_index, T& fifo, std::barrier<>& a, std::atomic_bool&) {
 		auto handle = fifo.get_handle();
 		a.arrive_and_wait();
-		while (handle.push(thread_index)) {
+		while (handle.push(thread_index + 1)) {
 			results[thread_index]++;
 		}
+		std::cout << "DONE" << std::endl;
 	}
 
 	template <typename T>
