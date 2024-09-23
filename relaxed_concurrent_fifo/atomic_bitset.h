@@ -52,9 +52,9 @@ private:
 
         auto rotated = std::rotr(static_cast<actual_type>(data), initial_rot);
         int counted;
-        for (int i = 0; i < actual_size; i += counted) {
+        for (size_t i = 0; i < actual_size; i += counted) {
             counted = IS_SET ? std::countr_zero(rotated) : std::countr_one(rotated);
-        	auto original_index = (initial_rot + i + counted) % actual_size;
+        	size_t original_index = (initial_rot + i + counted) % actual_size;
         	if (!SET || set_bit_atomic<!IS_SET>(data, original_index)) {
                 return original_index;
             }

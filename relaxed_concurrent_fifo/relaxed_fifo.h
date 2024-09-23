@@ -174,7 +174,7 @@ public:
 					// TODO: I don't like this.
 					// Before we move, let's invalidate all write epochs in the blocks.
 					bool all_empty = true;
-					for (int i = 0; i < BLOCKS_PER_WINDOW; i++) {
+					for (size_t i = 0; i < BLOCKS_PER_WINDOW; i++) {
 						block_t& block = window->blocks[i];
 						uint32_t wie = block.header.write_index_and_epoch;
 						do {
