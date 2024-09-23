@@ -178,7 +178,7 @@ int main() {
 	//test_consistency<1, 2, 2000, 2000>(0.5);
 
 	std::vector<size_t> processor_counts;
-	for (size_t i = 1; i <= std::thread::hardware_concurrency() - 1; i *= 2) {
+	for (size_t i = 1; i <= std::thread::hardware_concurrency(); i *= 2) {
 		processor_counts.emplace_back(i);
 	}
 
