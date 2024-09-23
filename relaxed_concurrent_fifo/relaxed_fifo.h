@@ -242,6 +242,7 @@ public:
 					}
 					header = &read_block->header;
 					// Keep rie to iterate once more.
+					index = 0; // TODO: This is unnecessary.
 				}
 			} while (!header->read_started_index_and_epoch.compare_exchange_strong(rie, rie + 1));
 
@@ -249,7 +250,7 @@ public:
 			while ((ret = std::move(read_block->cells[index].load())) == 0) { }
 			read_block->cells[index] = 0;
 
-			auto finished_index = header->read_finished_index.fetch_add(1) + 1;
+			uint16_t finished_index = header->read_finished_index.fetch_add(1) + 1;
 			if (finished_index == (header->write_index_and_epoch & 0xffff)) {
 				window_t& window = fifo.buffer[read_window % fifo.window_count];
 				auto diff = read_block - window.blocks;

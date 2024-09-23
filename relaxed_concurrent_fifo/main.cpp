@@ -87,7 +87,7 @@ void test_consistency(double prefill) {
 			auto handle = fifo.get_handle();
 			a.arrive_and_wait();
 			for (uint64_t j = 0; j < PER_THREAD_ELEMENTS; j++) {
-				auto val = (i << 32) | j + 1;
+				auto val = (i << 32) | (j + 1);
 				test[i].push_back(val);
 				while (!handle.push(val)) {}
 				std::optional<uint64_t> pop;
