@@ -12,6 +12,8 @@
 
 #include <iostream>
 
+#define LOG_WINDOW_MOVE 1
+
 constexpr size_t CACHE_SIZE =
 #if __cpp_lib_hardware_interference_size >= 201603
 	std::hardware_constructive_interference_size;
@@ -58,8 +60,8 @@ private:
 
 	std::unique_ptr<window_t[]> buffer;
 	
-	std::atomic_uint64_t read_window;
-	std::atomic_uint64_t write_window;
+	std::atomic_uint16_t read_window;
+	std::atomic_uint16_t write_window;
 
 	// 0 is a reserved id!
 	std::atomic<handle_id> latest_handle_id = 1;
@@ -67,21 +69,35 @@ private:
 		return latest_handle_id++;
 	}
 
+	static constexpr size_t make_po2(size_t size) {
+		size_t ret = 1;
+		while (size > ret) {
+			ret *= 2;
+		}
+		return ret;
+	}
+
 public:
-	relaxed_fifo(size_t size) : window_count(size / BLOCKS_PER_WINDOW / CELLS_PER_BLOCK) {
+	relaxed_fifo(size_t size) : window_count(make_po2(size / BLOCKS_PER_WINDOW / CELLS_PER_BLOCK)) {
 		buffer = std::make_unique<window_t[]>(window_count);
 		if (window_count <= 2) {
 			throw std::runtime_error("FIFO parameters would result in less than 3 windows!");
 		}
-		read_window = window_count;
-		write_window = window_count + 1;
-		for (size_t i = 0; i < window_count; i++) {
+		read_window = static_cast<uint16_t>(window_count);
+		write_window = static_cast<uint16_t>(window_count + 1);
+		for (size_t i = 1; i < window_count; i++) {
 			window_t& window = buffer[i];
 			for (size_t j = 0; j < BLOCKS_PER_WINDOW; j++) {
 				header_t& header = window.blocks[j].header;
 				header.read_started_index_and_epoch = static_cast<uint32_t>(window_count + i) << 16;
 				header.write_index_and_epoch = header.read_started_index_and_epoch + 1;
 			}
+		}
+		window_t& window = buffer[0];
+		for (size_t j = 0; j < BLOCKS_PER_WINDOW; j++) {
+			header_t& header = window.blocks[j].header;
+			header.read_started_index_and_epoch = static_cast<uint32_t>(window_count * 2) << 16;
+			header.write_index_and_epoch = header.read_started_index_and_epoch + 1;
 		}
 	}
 
@@ -105,13 +121,13 @@ public:
 
 		// Doing it like this allows the push code to grab a new block instead of requiring special cases for first-time initialization.
 		// An already active block will always trigger a check.
-		static inline block_t dummy_block{header_t{1 << 16, 1 << 16, 0}, {}};
+		static inline block_t dummy_block{header_t{0xffffu << 16, 0xffffu << 16, 0}, {}};
 	
 		block_t* read_block = &dummy_block;
 		block_t* write_block = &dummy_block;
 
-		uint64_t write_window = 0;
-		uint64_t read_window = 0;
+		uint16_t write_window = 0;
+		uint16_t read_window = 0;
 
 		handle(relaxed_fifo& fifo) : fifo(fifo), id(fifo.get_handle_id()) { }
 
@@ -140,7 +156,7 @@ public:
 
 		bool claim_new_block_write() {
 			size_t free_bit;
-			uint64_t window_index;
+			uint16_t window_index;
 			window_t* window;
 			do {
 				window_index = fifo.write_window;
@@ -152,19 +168,22 @@ public:
 						return false;
 					}
 					fifo.write_window.compare_exchange_strong(window_index, window_index + 1);
+#ifdef LOG_WINDOW_MOVE
+					std::cout << "Write move " << (window_index + 1) << std::endl;
+#endif // LOG_WINDOW_MOVE
 				} else {
 					break;
 				}
 			} while (true);
 
-			write_window = window_index;
+			write_window = static_cast<uint16_t>(window_index);
 			write_block = &window->blocks[free_bit];
 			return true;
 		}
 
 		bool claim_new_block_read() {
 			size_t free_bit;
-			uint64_t window_index;
+			uint16_t window_index;
 			window_t* window;
 			do {
 				window_index = fifo.read_window;
@@ -180,27 +199,41 @@ public:
 						do {
 							// We keep the inner index of the block but poison the epoch.
 							auto inner_index = wie & 0xffff; // Either 1 (unused, we check that later) or fully emptied.
-							if (inner_index != 1 && inner_index != (block.header.read_finished_index & 0xffff)) {
+							if (inner_index != 1 && inner_index != (block.header.read_finished_index & 0xffff)) { // TODO: The second should not realy be the case.
 								// It got pushed into in the meantime, so this means the block must be occupied and there's more to be popped.
 								all_empty = false;
 								break;
 							}
-						} while (!block.header.write_index_and_epoch.compare_exchange_weak(wie, static_cast<uint32_t>(window_index + fifo.window_count + 1)));
+						} while (!block.header.write_index_and_epoch.compare_exchange_weak(wie, (static_cast<uint32_t>(window_index + fifo.window_count) << 16) + 1));
+						uint32_t rie = block.header.read_started_index_and_epoch;
+						// Also move the read window if it's safe to do so (we've successfully invalidated the write epoch, so no new writes will take place).
+						if (all_empty && (rie >> 16) == window_index) { // TODO: Instead of the second check here just write redundantly?
+							// TODO: Do we need to loop this??
+							auto new_val = static_cast<uint32_t>(window_index + fifo.window_count) << 16;
+							bool res = block.header.read_started_index_and_epoch.compare_exchange_strong(rie, static_cast<uint32_t>(window_index + fifo.window_count) << 16);
+							assert(res || rie == new_val);
+						}
 					}
 					// Make sure that none of the potential blocks with index 1 were actually used.
 					if (!all_empty || window->filled_set.any()) {
 						continue;
 					}
 					// TODO Until here.
-					uint64_t write_window = fifo.write_window;
-					if (write_window == window_index + 1) {
+					uint16_t write_window = fifo.write_window;
+					if (write_window == static_cast<uint16_t>(window_index + 1)) {
 						if (!fifo.buffer[write_window % fifo.window_count].filled_set.any()) {
 							return false;
 						}
 						fifo.write_window.compare_exchange_strong(write_window, write_window + 1);
+#ifdef LOG_WINDOW_MOVE
+						std::cout << "Write force move " << (write_window + 1) << std::endl;
+#endif // LOG_WINDOW_MOVE
 					}
 
 					fifo.read_window.compare_exchange_strong(window_index, window_index + 1);
+#ifdef LOG_WINDOW_MOVE
+					std::cout << "Read move " << (window_index + 1) << std::endl;
+#endif // LOG_WINDOW_MOVE
 				} else {
 					break;
 				}
@@ -218,13 +251,21 @@ public:
 			header_t* header = &write_block->header;
 			uint32_t wie = header->write_index_and_epoch;
 			uint16_t index;
-			if ((wie >> 16) != (write_window & 0xffff) || (index = (wie & 0xffff)) >= CELLS_PER_BLOCK || !header->write_index_and_epoch.compare_exchange_strong(wie, wie + 1)) {
+			if (static_cast<uint16_t>(wie >> 16) != (write_window & 0xffff) || (index = (wie & 0xffff)) >= CELLS_PER_BLOCK || !header->write_index_and_epoch.compare_exchange_strong(wie, wie + 1)) {
+				// TODO: I think there lies a bug here relating to an element getting swallowed.
+				// The following code in combination with a bitset reset should alleviate it.
+				/*do {
+					if (!claim_new_block_write()) {
+						return false;
+					}
+					header = &write_block->header;
+					wie = header->write_index_and_epoch;
+				} while (wie >> 16 != write_window);*/
 				if (!claim_new_block_write()) {
 					return false;
 				}
 				index = 0;
 			}
-
 			write_block->cells[index] = std::move(t);
 
 			return true;
@@ -236,13 +277,15 @@ public:
 			uint32_t index;
 
 			do {
-				if ((rie >> 16) != (read_window & 0xffff) || (index = (rie & 0xffff)) >= (header->write_index_and_epoch & 0xffff)) {
+				// We're using > here because while the writes do consistently get updated, the read values do not (check the loop).
+				if (static_cast<uint16_t>(rie >> 16) != (read_window & 0xffff) || (index = (rie & 0xffff)) >= (header->write_index_and_epoch & 0xffff)) {
 					if (!claim_new_block_read()) {
-						return false;
+						return std::nullopt;
 					}
 					header = &read_block->header;
 					// Keep rie to iterate once more.
 					index = 0; // TODO: This is unnecessary.
+					rie = ~rie; // TODO: Better way to invalidate?
 				}
 			} while (!header->read_started_index_and_epoch.compare_exchange_strong(rie, rie + 1));
 
@@ -254,12 +297,15 @@ public:
 			if (finished_index == (header->write_index_and_epoch & 0xffff)) {
 				window_t& window = fifo.buffer[read_window % fifo.window_count];
 				auto diff = read_block - window.blocks;
-				window.filled_set.reset(diff);
-				// Increase epoch.
+
+				// Before we mark this block as empty, we make it unavailable for other readers and writers of this epoch.
+				header->write_index_and_epoch = (static_cast<uint32_t>(read_window + fifo.window_count) << 16) + 1;
+				header->read_finished_index = 0;
 				header->read_started_index_and_epoch = static_cast<uint32_t>(read_window + fifo.window_count) << 16;
 
-				header->read_finished_index = 0;
-				read_window = 0; // Invalidate read window. TODO: I don't think this works in all cases.
+				window.filled_set.reset(diff);
+
+				 // We don't need to invalidate the read window because it has been changed already.
 			}
 
 			return ret;
