@@ -210,8 +210,8 @@ public:
 						// Also move the read window if it's safe to do so (we've successfully invalidated the write epoch, so no new writes will take place).
 						if (all_empty && (rie >> 16) == window_index) { // TODO: Instead of the second check here just write redundantly?
 							// TODO: Do we need to loop this??
-							auto new_val = static_cast<uint32_t>(window_index + fifo.window_count) << 16;
-							bool res = block.header.read_started_index_and_epoch.compare_exchange_strong(rie, static_cast<uint32_t>(window_index + fifo.window_count) << 16);
+							[[maybe_unused]] auto new_val = static_cast<uint32_t>(window_index + fifo.window_count) << 16;
+							[[maybe_unused]] bool res = block.header.read_started_index_and_epoch.compare_exchange_strong(rie, static_cast<uint32_t>(window_index + fifo.window_count) << 16);
 							assert(res || rie == new_val);
 						}
 					}
