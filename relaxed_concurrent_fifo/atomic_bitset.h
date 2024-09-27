@@ -8,11 +8,11 @@
 #include <cassert>
 
 template <bool SET, typename T>
-constexpr bool set_bit_atomic(std::atomic<T>& data, size_t index) {
+constexpr bool set_bit_atomic(std::atomic<T>& data, size_t index, std::memory_order order = std::memory_order_seq_cst) {
     T old_val;
     T new_val;
     do {
-        old_val = data;
+        old_val = data.load(order);
         if constexpr (SET) {
             new_val = old_val | (1ull << index);
         } else {
@@ -21,7 +21,7 @@ constexpr bool set_bit_atomic(std::atomic<T>& data, size_t index) {
         if (old_val == new_val) {
             return false;
         }
-    } while (!data.compare_exchange_weak(old_val, new_val));
+    } while (!data.compare_exchange_weak(old_val, new_val, order));
     return true;
 }
 
@@ -72,9 +72,9 @@ public:
     /// </summary>
     /// <param name="index">The index of the bit to set.</param>
     /// <returns>Whether the bit has been newly set. false means the bit had already been set.</returns>
-    constexpr bool set(size_t index) {
+    constexpr bool set(size_t index, std::memory_order order = std::memory_order_seq_cst) {
         assert(index < size());
-        return set_bit_atomic<true>(data[index / bit_count], index % bit_count);
+        return set_bit_atomic<true>(data[index / bit_count], index % bit_count, order);
     }
 
     /// <summary>
@@ -82,9 +82,9 @@ public:
     /// </summary>
     /// <param name="index">The index of the bit to set.</param>
     /// <returns>Whether the bit has been newly set. false means the bit had already been set.</returns>
-    constexpr bool reset(size_t index) {
+    constexpr bool reset(size_t index, std::memory_order order = std::memory_order_seq_cst) {
         assert(index < size());
-        return set_bit_atomic<false>(data[index / bit_count], index % bit_count);
+        return set_bit_atomic<false>(data[index / bit_count], index % bit_count, order);
     }
 
     constexpr bool test(size_t index, std::memory_order order = std::memory_order_seq_cst) const {

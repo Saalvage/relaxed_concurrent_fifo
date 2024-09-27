@@ -65,12 +65,12 @@ void test_all() {
 	test_full_push<T>();
 }*/
 
-template <size_t THREAD_COUNT, size_t BLOCK_MULTIPLIER, size_t FIFO_SIZE, uint32_t PER_THREAD_ELEMENTS>
-void test_consistency(double prefill) {
-	relaxed_fifo<uint64_t, THREAD_COUNT * BLOCK_MULTIPLIER> fifo{FIFO_SIZE};
+template <size_t THREAD_COUNT, size_t BLOCK_MULTIPLIER>
+void test_consistency(size_t fifo_size, size_t elements_per_thread, double prefill) {
+	relaxed_fifo<uint64_t, THREAD_COUNT * BLOCK_MULTIPLIER> fifo{ fifo_size };
 	auto handle = fifo.get_handle();
 
-	size_t pre_push = static_cast<size_t>(FIFO_SIZE * prefill);
+	size_t pre_push = static_cast<size_t>(fifo_size * prefill);
 	std::unordered_multiset<uint64_t> test_ints;
 	for (size_t index = 0; index < pre_push; index++) {
 		auto i = index | (1ull << 63);
@@ -86,7 +86,7 @@ void test_consistency(double prefill) {
 		threads[i] = std::jthread([&, i]() {
 			auto handle = fifo.get_handle();
 			a.arrive_and_wait();
-			for (uint64_t j = 0; j < PER_THREAD_ELEMENTS; j++) {
+			for (uint64_t j = 0; j < elements_per_thread; j++) {
 				auto val = (i << 32) | (j + 1);
 				test[i].push_back(val);
 				while (!handle.push(val)) {}
@@ -175,7 +175,7 @@ int main() {
 	std::cout << "Running in debug mode!" << std::endl;
 #endif // NDEBUG
 
-	//test_consistency<1, 2, 2000, 2000>(0.5);
+	//test_consistency<8, 16>(20000, 200000, 0);
 
 	std::vector<size_t> processor_counts;
 	for (size_t i = 1; i <= std::thread::hardware_concurrency(); i *= 2) {

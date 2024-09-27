@@ -12,7 +12,7 @@
 
 #include <iostream>
 
-#define LOG_WINDOW_MOVE 1
+#define LOG_WINDOW_MOVE 0
 
 constexpr size_t CACHE_SIZE =
 #if __cpp_lib_hardware_interference_size >= 201603
@@ -146,8 +146,8 @@ public:
 			for (size_t i = 0; i < bits.size(); i++) {
 				auto idx = (i + off) % bits.size();
 				if (instantly_write
-						? set ? bits.set(idx) : bits.reset(idx)
-						: set ? !bits[idx] : bits[idx]) {
+						? set ? bits.set(idx, std::memory_order_relaxed) : bits.reset(idx, std::memory_order_relaxed)
+						: set ? !bits.test(idx, std::memory_order_relaxed) : bits.test(idx, std::memory_order_relaxed)) {
 					return idx;
 				}
 			}
@@ -159,16 +159,16 @@ public:
 			uint16_t window_index;
 			window_t* window;
 			do {
-				window_index = fifo.write_window;
+				window_index = fifo.write_window.load(std::memory_order_relaxed);
 				window = &fifo.buffer[window_index % fifo.window_count];
 				free_bit = claim_free_bit<true, true>(window->filled_set);
 				if (free_bit == std::numeric_limits<size_t>::max()) {
 					// No more free bits, we move.
-					if (window_index + 1 - fifo.read_window == fifo.window_count) {
+					if (window_index + 1 - fifo.read_window.load(std::memory_order_acquire) == fifo.window_count) {
 						return false;
 					}
-					fifo.write_window.compare_exchange_strong(window_index, window_index + 1);
-#ifdef LOG_WINDOW_MOVE
+					fifo.write_window.compare_exchange_strong(window_index, window_index + 1, std::memory_order_release, std::memory_order_relaxed);
+#if LOG_WINDOW_MOVE
 					std::cout << "Write move " << (window_index + 1) << std::endl;
 #endif // LOG_WINDOW_MOVE
 				} else {
@@ -176,17 +176,18 @@ public:
 				}
 			} while (true);
 
-			write_window = static_cast<uint16_t>(window_index);
+			write_window = window_index;
 			write_block = &window->blocks[free_bit];
 			return true;
 		}
 
+		// TODO: Relax!
 		bool claim_new_block_read() {
 			size_t free_bit;
 			uint16_t window_index;
 			window_t* window;
 			do {
-				window_index = fifo.read_window;
+				window_index = fifo.read_window.load(std::memory_order_acquire);
 				window = &fifo.buffer[window_index % fifo.window_count];
 				free_bit = claim_free_bit<false, false>(window->filled_set);
 				if (free_bit == std::numeric_limits<size_t>::max()) {
@@ -225,13 +226,13 @@ public:
 							return false;
 						}
 						fifo.write_window.compare_exchange_strong(write_window, write_window + 1);
-#ifdef LOG_WINDOW_MOVE
+#if LOG_WINDOW_MOVE
 						std::cout << "Write force move " << (write_window + 1) << std::endl;
 #endif // LOG_WINDOW_MOVE
 					}
 
 					fifo.read_window.compare_exchange_strong(window_index, window_index + 1);
-#ifdef LOG_WINDOW_MOVE
+#if LOG_WINDOW_MOVE
 					std::cout << "Read move " << (window_index + 1) << std::endl;
 #endif // LOG_WINDOW_MOVE
 				} else {
@@ -249,9 +250,10 @@ public:
 			assert(t != 0);
 
 			header_t* header = &write_block->header;
-			uint32_t wie = header->write_index_and_epoch;
+			uint32_t wie = header->write_index_and_epoch.load(std::memory_order_relaxed);
 			uint16_t index;
-			if (static_cast<uint16_t>(wie >> 16) != (write_window & 0xffff) || (index = (wie & 0xffff)) >= CELLS_PER_BLOCK || !header->write_index_and_epoch.compare_exchange_strong(wie, wie + 1)) {
+			if (static_cast<uint16_t>(wie >> 16) != (write_window & 0xffff) || (index = (wie & 0xffff)) >= CELLS_PER_BLOCK
+					|| !header->write_index_and_epoch.compare_exchange_strong(wie, wie + 1, std::memory_order_relaxed)) {
 				// TODO: I think there lies a bug here relating to an element getting swallowed.
 				// The following code in combination with a bitset reset should alleviate it.
 				/*do {
@@ -266,19 +268,19 @@ public:
 				}
 				index = 0;
 			}
-			write_block->cells[index] = std::move(t);
+			write_block->cells[index].store(std::move(t), std::memory_order_relaxed);
 
 			return true;
 		}
 
 		std::optional<T> pop() {
 			header_t* header = &read_block->header;
-			uint32_t rie = header->read_started_index_and_epoch;
+			uint32_t rie = header->read_started_index_and_epoch.load(std::memory_order_acquire);
 			uint32_t index;
 
 			do {
-				// We're using > here because while the writes do consistently get updated, the read values do not (check the loop).
-				if (static_cast<uint16_t>(rie >> 16) != (read_window & 0xffff) || (index = (rie & 0xffff)) >= (header->write_index_and_epoch & 0xffff)) {
+				if (static_cast<uint16_t>(rie >> 16) != (read_window & 0xffff)
+						|| (index = (rie & 0xffff)) >= (header->write_index_and_epoch.load(std::memory_order_relaxed) & 0xffff)) {
 					if (!claim_new_block_read()) {
 						return std::nullopt;
 					}
@@ -287,25 +289,26 @@ public:
 					index = 0; // TODO: This is unnecessary.
 					rie = ~rie; // TODO: Better way to invalidate?
 				}
-			} while (!header->read_started_index_and_epoch.compare_exchange_strong(rie, rie + 1));
+			} while (!header->read_started_index_and_epoch.compare_exchange_weak(rie, rie + 1, std::memory_order_relaxed, std::memory_order_acquire));
 
 			T ret;
-			while ((ret = std::move(read_block->cells[index].load())) == 0) { }
-			read_block->cells[index] = 0;
+			while ((ret = std::move(read_block->cells[index].load(std::memory_order_relaxed))) == 0) { }
+			read_block->cells[index].store(0, std::memory_order_relaxed);
 
-			uint16_t finished_index = header->read_finished_index.fetch_add(1) + 1;
-			if (finished_index == (header->write_index_and_epoch & 0xffff)) {
-				window_t& window = fifo.buffer[read_window % fifo.window_count];
-				auto diff = read_block - window.blocks;
-
+			uint16_t finished_index = header->read_finished_index.fetch_add(1, std::memory_order_relaxed) + 1;
+			uint32_t write_index = header->write_index_and_epoch.load(std::memory_order_relaxed);
+			if (finished_index == (write_index & 0xffff)) {
 				// Before we mark this block as empty, we make it unavailable for other readers and writers of this epoch.
-				header->write_index_and_epoch = (static_cast<uint32_t>(read_window + fifo.window_count) << 16) + 1;
-				header->read_finished_index = 0;
-				header->read_started_index_and_epoch = static_cast<uint32_t>(read_window + fifo.window_count) << 16;
+				if (header->write_index_and_epoch.compare_exchange_strong(write_index, (static_cast<uint32_t>(read_window + fifo.window_count) << 16) + 1, std::memory_order_relaxed)) {
+					header->read_finished_index.store(0, std::memory_order_relaxed);
+					header->read_started_index_and_epoch.store(static_cast<uint32_t>(read_window + fifo.window_count) << 16, std::memory_order_release);
 
-				window.filled_set.reset(diff);
+					window_t& window = fifo.buffer[read_window % fifo.window_count];
+					auto diff = read_block - window.blocks;
+					window.filled_set.reset(diff, std::memory_order_relaxed);
 
-				 // We don't need to invalidate the read window because it has been changed already.
+					// We don't need to invalidate the read window because it has been changed already.	
+				}
 			}
 
 			return ret;
