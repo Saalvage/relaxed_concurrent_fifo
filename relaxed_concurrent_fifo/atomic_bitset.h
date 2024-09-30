@@ -28,6 +28,8 @@ constexpr bool set_bit_atomic(std::atomic<T>& data, size_t index, std::memory_or
 template <size_t N, typename ARR_TYPE = uint8_t>
 class atomic_bitset {
 private:
+    static_assert(N % (sizeof(ARR_TYPE) * 8) == 0, "Bit count must be dividable by size of array type!");
+
     static constexpr size_t bit_count = sizeof(ARR_TYPE) * 8;
     static constexpr size_t array_members = N / bit_count + (N % bit_count ? 1 : 0);
     std::array<std::atomic<ARR_TYPE>, array_members> data;
@@ -42,8 +44,7 @@ private:
 
     template <bool IS_SET, bool SET>
     static constexpr size_t claim_bit_singular(std::atomic<ARR_TYPE>& data, int initial_rot, std::memory_order order) {
-        using actual_type = std::conditional_t<(N > sizeof(ARR_TYPE)), typename min_fit_int<N>::type, ARR_TYPE>;
-        constexpr size_t actual_size = sizeof(actual_type) * 8;
+        constexpr size_t actual_size = sizeof(ARR_TYPE) * 8;
 
         auto rotated = std::rotr(data.load(order), initial_rot);
         int counted;
