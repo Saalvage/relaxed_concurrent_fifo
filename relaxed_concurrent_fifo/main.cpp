@@ -5,6 +5,7 @@
 #include "concurrent_fifo.h"
 
 #include <thread>
+#include <functional>
 #include <ranges>
 #include <filesystem>
 #include <fstream>
