@@ -289,7 +289,7 @@ public:
 					index = 0; // TODO: This is unnecessary.
 					rie = ~rie; // TODO: Better way to invalidate?
 				}
-			} while (!header->read_started_index_and_epoch.compare_exchange_weak(rie, rie + 1, std::memory_order_relaxed, std::memory_order_acquire));
+			} while (!header->read_started_index_and_epoch.compare_exchange_weak(rie, rie + 1, std::memory_order_acquire));
 
 			T ret;
 			while ((ret = std::move(read_block->cells[index].load(std::memory_order_relaxed))) == 0) { }
