@@ -104,7 +104,7 @@ public:
     }
 
     template <bool IS_SET, bool SET>
-    constexpr size_t claim_bit(std::memory_order order = std::memory_order_seq_cst) {
+    size_t claim_bit(std::memory_order order = std::memory_order_seq_cst) {
         static thread_local std::random_device dev;
         static thread_local std::minstd_rand rng{ dev() };
         static thread_local std::uniform_int_distribution dist_inner{ 0, static_cast<int>(N - 1) };
