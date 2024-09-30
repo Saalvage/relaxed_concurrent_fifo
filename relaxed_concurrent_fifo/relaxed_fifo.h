@@ -21,9 +21,12 @@ constexpr size_t CACHE_SIZE =
 	64;
 #endif // __cpp_lib_hardware_interference_size
 
-template <typename T, size_t BLOCKS_PER_WINDOW = 8, size_t CELLS_PER_BLOCK = CACHE_SIZE / sizeof(T) - 1>
+template <typename T, size_t BLOCKS_PER_WINDOW_RAW = 8, size_t CELLS_PER_BLOCK = CACHE_SIZE / sizeof(T) - 1>
 class relaxed_fifo {
 private:
+	// TODO: Do properly, we need multiples of 8 for the bitset to work correctly.
+	static constexpr size_t BLOCKS_PER_WINDOW = std::max<size_t>(8, BLOCKS_PER_WINDOW_RAW);
+
 	// TODO: Optimize modulo.
 	const size_t window_count;
 
@@ -161,7 +164,7 @@ public:
 			do {
 				window_index = fifo.write_window.load(std::memory_order_relaxed);
 				window = &fifo.buffer[window_index % fifo.window_count];
-				free_bit = claim_free_bit<true, true>(window->filled_set);
+				free_bit = window->filled_set.template claim_bit<false, true>(std::memory_order_relaxed);
 				if (free_bit == std::numeric_limits<size_t>::max()) {
 					// No more free bits, we move.
 					if (static_cast<size_t>(window_index) + 1 - fifo.read_window.load(std::memory_order_acquire) == fifo.window_count) {
@@ -189,7 +192,7 @@ public:
 			do {
 				window_index = fifo.read_window.load(std::memory_order_acquire);
 				window = &fifo.buffer[window_index % fifo.window_count];
-				free_bit = claim_free_bit<false, false>(window->filled_set);
+				free_bit = window->filled_set.template claim_bit<true, false>(std::memory_order_relaxed);
 				if (free_bit == std::numeric_limits<size_t>::max()) {
 					uint16_t write_window = fifo.write_window.load();
 					if (write_window == static_cast<uint16_t>(window_index + 1)) {

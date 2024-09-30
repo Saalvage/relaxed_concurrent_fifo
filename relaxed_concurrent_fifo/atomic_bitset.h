@@ -46,16 +46,19 @@ private:
     static inline thread_local std::uniform_int_distribution dist_outer{ 0, static_cast<int>(array_members - 1) };
 
     template <bool IS_SET, bool SET>
-    static constexpr size_t claim_bit_singular(std::atomic<ARR_TYPE>& data, int initial_rot) {
+    static constexpr size_t claim_bit_singular(std::atomic<ARR_TYPE>& data, int initial_rot, std::memory_order order) {
         using actual_type = std::conditional_t<(N > sizeof(ARR_TYPE)), typename min_fit_int<N>::type, ARR_TYPE>;
         constexpr size_t actual_size = sizeof(actual_type) * 8;
 
-        auto rotated = std::rotr(static_cast<actual_type>(data), initial_rot);
+        auto rotated = std::rotr(data.load(order), initial_rot);
         int counted;
         for (size_t i = 0; i < actual_size; i += counted) {
             counted = IS_SET ? std::countr_zero(rotated) : std::countr_one(rotated);
+            if (counted == actual_size) {
+                return std::numeric_limits<size_t>::max();
+            }
         	size_t original_index = (initial_rot + i + counted) % actual_size;
-        	if (!SET || set_bit_atomic<!IS_SET>(data, original_index)) {
+        	if (!SET || set_bit_atomic<!IS_SET>(data, original_index, order)) {
                 return original_index;
             }
             rotated >>= ++counted;
@@ -106,7 +109,7 @@ public:
     }
 
     template <bool IS_SET, bool SET>
-    constexpr size_t claim_bit() {
+    constexpr size_t claim_bit(std::memory_order order = std::memory_order_seq_cst) {
         int off;
         if constexpr (array_members > 1) {
             off = dist_outer(rng);
@@ -116,7 +119,7 @@ public:
         auto initial_rot = dist_inner(rng);
         for (size_t i = 0; i < data.size(); i++) {
             auto index = (i + off) % data.size();
-            if (auto ret = claim_bit_singular<IS_SET, SET>(data[index], initial_rot); ret != std::numeric_limits<size_t>::max()) {
+            if (auto ret = claim_bit_singular<IS_SET, SET>(data[index], initial_rot, order); ret != std::numeric_limits<size_t>::max()) {
                 return ret + index * bit_count;
             }
         }
