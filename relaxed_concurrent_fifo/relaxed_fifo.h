@@ -90,14 +90,14 @@ public:
 			for (size_t j = 0; j < BLOCKS_PER_WINDOW; j++) {
 				header_t& header = window.blocks[j].header;
 				header.read_started_index_and_epoch = static_cast<uint32_t>(window_count + i) << 16;
-				header.write_index_and_epoch = header.read_started_index_and_epoch + 1;
+				header.write_index_and_epoch = header.read_started_index_and_epoch.load();
 			}
 		}
 		window_t& window = buffer[0];
 		for (size_t j = 0; j < BLOCKS_PER_WINDOW; j++) {
 			header_t& header = window.blocks[j].header;
 			header.read_started_index_and_epoch = static_cast<uint32_t>(window_count * 2) << 16;
-			header.write_index_and_epoch = header.read_started_index_and_epoch + 1;
+			header.write_index_and_epoch = header.read_started_index_and_epoch.load();
 		}
 	}
 
@@ -191,41 +191,34 @@ public:
 				window = &fifo.buffer[window_index % fifo.window_count];
 				free_bit = claim_free_bit<false, false>(window->filled_set);
 				if (free_bit == std::numeric_limits<size_t>::max()) {
-					// TODO: I don't like this.
-					// Before we move, let's invalidate all write epochs in the blocks.
-					bool all_empty = true;
-					for (size_t i = 0; i < BLOCKS_PER_WINDOW; i++) {
-						block_t& block = window->blocks[i];
-						uint32_t wie = block.header.write_index_and_epoch;
-						do {
-							// We keep the inner index of the block but poison the epoch.
-							auto inner_index = wie & 0xffff; // Either 1 (unused, we check that later) or fully emptied.
-							if (inner_index != 1 && inner_index != (block.header.read_finished_index & 0xffff)) { // TODO: The second should not realy be the case.
-								// It got pushed into in the meantime, so this means the block must be occupied and there's more to be popped.
-								all_empty = false;
-								break;
-							}
-						} while (!block.header.write_index_and_epoch.compare_exchange_weak(wie, (static_cast<uint32_t>(window_index + fifo.window_count) << 16) + 1));
-						uint32_t rie = block.header.read_started_index_and_epoch;
-						// Also move the read window if it's safe to do so (we've successfully invalidated the write epoch, so no new writes will take place).
-						if (all_empty && (rie >> 16) == window_index) { // TODO: Instead of the second check here just write redundantly?
-							// TODO: Do we need to loop this??
-							[[maybe_unused]] auto new_val = static_cast<uint32_t>(window_index + fifo.window_count) << 16;
-							[[maybe_unused]] bool res = block.header.read_started_index_and_epoch.compare_exchange_strong(rie, static_cast<uint32_t>(window_index + fifo.window_count) << 16);
-							assert(res || rie == new_val);
-						}
-					}
-					// Make sure that none of the potential blocks with index 1 were actually used.
-					if (!all_empty || window->filled_set.any()) {
-						continue;
-					}
-					// TODO Until here.
-					uint16_t write_window = fifo.write_window;
+					uint16_t write_window = fifo.write_window.load();
 					if (write_window == static_cast<uint16_t>(window_index + 1)) {
 						if (!fifo.buffer[write_window % fifo.window_count].filled_set.any()) {
 							return false;
 						}
-						fifo.write_window.compare_exchange_strong(write_window, write_window + 1);
+						if (fifo.write_window.compare_exchange_strong(write_window, write_window + 1)) {
+							// We force-moved the write window, there might be unclaimed blocks in the old one.
+							// Before we move the read window, let's invalidate all unclaimed write epochs in the blocks.
+							// TODO: We should be able to do this AFTER the moving the read window, saving one other thread from potentially
+							// having to move it in the meantime.
+							window_t& new_window = fifo.buffer[write_window % fifo.window_count];
+							for (size_t i = 0; i < BLOCKS_PER_WINDOW; i++) {
+								if (new_window.filled_set.test(i)) {
+									continue;
+								}
+
+								block_t& block = new_window.blocks[i];
+								uint32_t wie = block.header.write_index_and_epoch; // TODO: We know what we want here, save the load!
+								if ((wie >> 16) == write_window && (wie & 0xffff) == 0 && block.header.write_index_and_epoch.compare_exchange_strong(wie, static_cast<uint32_t>(write_window + fifo.window_count) << 16)) {
+									// If any of these checks fails, the block was claimed and written to in the meantime, so we have it be read normally as well.
+									uint32_t rie = block.header.read_started_index_and_epoch;
+									assert(rie >> 16 == write_window);
+									assert((rie & 0xffff) == 0);
+									[[maybe_unused]] bool succ = block.header.read_started_index_and_epoch.compare_exchange_strong(rie, static_cast<uint32_t>(write_window + fifo.window_count) << 16);
+									assert(succ);
+								}
+							}
+						}
 #if LOG_WINDOW_MOVE
 						std::cout << "Write force move " << (write_window + 1) << std::endl;
 #endif // LOG_WINDOW_MOVE
@@ -251,23 +244,33 @@ public:
 
 			header_t* header = &write_block->header;
 			uint32_t wie = header->write_index_and_epoch.load(std::memory_order_relaxed);
-			uint16_t index;
-			if (static_cast<uint16_t>(wie >> 16) != (write_window & 0xffff) || (index = (wie & 0xffff)) >= CELLS_PER_BLOCK
-					|| !header->write_index_and_epoch.compare_exchange_strong(wie, wie + 1, std::memory_order_relaxed)) {
-				// TODO: I think there lies a bug here relating to an element getting swallowed.
-				// The following code in combination with a bitset reset should alleviate it.
-				/*do {
+			uint16_t index = 0; // TODO: Don't initialize.
+			bool claimed = false;
+			do {
+				if (static_cast<uint16_t>(wie >> 16) != (write_window & 0xffff)
+						|| (index = (wie & 0xffff)) >= CELLS_PER_BLOCK) {
+					// TODO: We need this for the case where we claim a bit, but can't place an element inside,
+					// because the write window was already forced-moved.
+					// Maybe we could instead detect this elsewhere? (E.g. when encountering the same situation on claiming a new read block)
+					// TODO: This also still fails very sporadically.
+					if (claimed && index == 0) {
+						// We're abandoning an empty block!
+						window_t& window = fifo.buffer[write_window % fifo.window_count];
+						auto diff = write_block - window.blocks;
+						window.filled_set.reset(diff, std::memory_order_relaxed);
+					}
 					if (!claim_new_block_write()) {
 						return false;
 					}
+					claimed = true;
 					header = &write_block->header;
-					wie = header->write_index_and_epoch;
-				} while (wie >> 16 != write_window);*/
-				if (!claim_new_block_write()) {
-					return false;
+					// Keep wie to iterate once more.
+					index = 0; // TODO: This is unnecessary.
+					wie = ~wie; // TODO: Better way to invalidate?
 				}
-				index = 0;
-			}
+			// TODO: We can assume a failure here means we need a new block. Use for optimization?
+			} while (!header->write_index_and_epoch.compare_exchange_weak(wie, wie + 1, std::memory_order_relaxed, std::memory_order_acquire));
+
 			write_block->cells[index].store(std::move(t), std::memory_order_relaxed);
 
 			return true;
@@ -276,7 +279,7 @@ public:
 		std::optional<T> pop() {
 			header_t* header = &read_block->header;
 			uint32_t rie = header->read_started_index_and_epoch.load(std::memory_order_acquire);
-			uint32_t index;
+			uint32_t index = 0;
 
 			do {
 				if (static_cast<uint16_t>(rie >> 16) != (read_window & 0xffff)
@@ -285,7 +288,6 @@ public:
 						return std::nullopt;
 					}
 					header = &read_block->header;
-					// Keep rie to iterate once more.
 					index = 0; // TODO: This is unnecessary.
 					rie = ~rie; // TODO: Better way to invalidate?
 				}
@@ -299,7 +301,7 @@ public:
 			uint32_t write_index = header->write_index_and_epoch.load(std::memory_order_relaxed);
 			if (finished_index == (write_index & 0xffff)) {
 				// Before we mark this block as empty, we make it unavailable for other readers and writers of this epoch.
-				if (header->write_index_and_epoch.compare_exchange_strong(write_index, (static_cast<uint32_t>(read_window + fifo.window_count) << 16) + 1, std::memory_order_relaxed)) {
+				if (header->write_index_and_epoch.compare_exchange_strong(write_index, static_cast<uint32_t>(read_window + fifo.window_count) << 16, std::memory_order_relaxed)) {
 					header->read_finished_index.store(0, std::memory_order_relaxed);
 					header->read_started_index_and_epoch.store(static_cast<uint32_t>(read_window + fifo.window_count) << 16, std::memory_order_release);
 
