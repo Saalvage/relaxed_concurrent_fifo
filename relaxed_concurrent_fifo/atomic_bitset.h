@@ -42,8 +42,8 @@ private:
 
     static inline thread_local std::random_device dev;
     static inline thread_local std::minstd_rand rng{ dev() };
-    static inline thread_local std::uniform_int_distribution dist_inner{ 0, static_cast<int>(N - 1) };
-    static inline thread_local std::uniform_int_distribution dist_outer{ 0, static_cast<int>(array_members - 1) };
+    static inline std::uniform_int_distribution dist_inner{ 0, static_cast<int>(N - 1) };
+    static inline std::uniform_int_distribution dist_outer{ 0, static_cast<int>(array_members - 1) };
 
     template <bool IS_SET, bool SET>
     static constexpr size_t claim_bit_singular(std::atomic<ARR_TYPE>& data, int initial_rot, std::memory_order order) {
