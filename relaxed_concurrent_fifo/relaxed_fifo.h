@@ -164,7 +164,7 @@ public:
 				free_bit = claim_free_bit<true, true>(window->filled_set);
 				if (free_bit == std::numeric_limits<size_t>::max()) {
 					// No more free bits, we move.
-					if (window_index + 1 - fifo.read_window.load(std::memory_order_acquire) == fifo.window_count) {
+					if (static_cast<size_t>(window_index) + 1 - fifo.read_window.load(std::memory_order_acquire) == fifo.window_count) {
 						return false;
 					}
 					fifo.write_window.compare_exchange_strong(window_index, window_index + 1, std::memory_order_release, std::memory_order_relaxed);
@@ -291,7 +291,7 @@ public:
 					index = 0; // TODO: This is unnecessary.
 					rie = ~rie; // TODO: Better way to invalidate?
 				}
-			} while (!header->read_started_index_and_epoch.compare_exchange_weak(rie, rie + 1, std::memory_order_relaxed, std::memory_order_acquire));
+			} while (!header->read_started_index_and_epoch.compare_exchange_weak(rie, rie + 1, std::memory_order_acquire));
 
 			T ret;
 			while ((ret = std::move(read_block->cells[index].load(std::memory_order_relaxed))) == 0) { }
