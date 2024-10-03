@@ -212,10 +212,10 @@ public:
 
 								block_t& block = new_window.blocks[i];
 								uint32_t wie = block.header.write_index_and_epoch; // TODO: We know what we want here, save the load!
-								if ((wie >> 16) == write_window && (wie & 0xffff) == 0 && block.header.write_index_and_epoch.compare_exchange_strong(wie, static_cast<uint32_t>(write_window + fifo.window_count) << 16)) {
+								if ((wie >> 16) == (write_window & 0xffff) && (wie & 0xffff) == 0 && block.header.write_index_and_epoch.compare_exchange_strong(wie, static_cast<uint32_t>(write_window + fifo.window_count) << 16)) {
 									// If any of these checks fails, the block was claimed and written to in the meantime, so we have it be read normally as well.
 									uint32_t rie = block.header.read_started_index_and_epoch;
-									assert(rie >> 16 == write_window);
+									assert(rie >> 16 == (write_window & 0xffff));
 									assert((rie & 0xffff) == 0);
 									[[maybe_unused]] bool succ = block.header.read_started_index_and_epoch.compare_exchange_strong(rie, static_cast<uint32_t>(write_window + fifo.window_count) << 16);
 									assert(succ);
