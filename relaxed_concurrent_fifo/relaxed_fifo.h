@@ -242,7 +242,7 @@ public:
 			uint16_t index = 0; // TODO: Don't initialize.
 			bool claimed = false;
 			do {
-				if (static_cast<uint16_t>(ei >> 32) != (write_window & 0xffff'ffff)
+				if (ei >> 32 != (write_window & 0xffff'ffff)
 						|| (index = (ei & 0xffff)) >= CELLS_PER_BLOCK) {
 					// TODO: We need this for the case where we claim a bit, but can't place an element inside,
 					// because the write window was already forced-moved.
@@ -277,7 +277,7 @@ public:
 			uint16_t index = 0;
 
 			do {
-				if (static_cast<uint16_t>(ei >> 32) != (read_window & 0xffff'ffff)
+				if (ei >> 32 != (read_window & 0xffff'ffff)
 						|| (index = ((ei >> 16) & 0xffff)) >= (ei & 0xffff)) {
 					if (!claim_new_block_read()) {
 						return std::nullopt;
