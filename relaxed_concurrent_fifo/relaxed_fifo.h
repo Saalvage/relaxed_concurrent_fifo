@@ -63,8 +63,8 @@ private:
 
 	std::unique_ptr<window_t[]> buffer;
 	
-	std::atomic_uint16_t read_window;
-	std::atomic_uint16_t write_window;
+	std::atomic_uint64_t read_window;
+	std::atomic_uint64_t write_window;
 
 	// 0 is a reserved id!
 	std::atomic<handle_id> latest_handle_id = 1;
@@ -129,8 +129,8 @@ public:
 		block_t* read_block = &dummy_block;
 		block_t* write_block = &dummy_block;
 
-		uint16_t write_window = 0;
-		uint16_t read_window = 0;
+		uint64_t write_window = 0;
+		uint64_t read_window = 0;
 
 		handle(relaxed_fifo& fifo) : fifo(fifo), id(fifo.get_handle_id()) { }
 
@@ -159,7 +159,7 @@ public:
 
 		bool claim_new_block_write() {
 			size_t free_bit;
-			uint16_t window_index;
+			uint64_t window_index;
 			window_t* window;
 			do {
 				window_index = fifo.write_window.load(std::memory_order_relaxed);
@@ -167,7 +167,7 @@ public:
 				free_bit = window->filled_set.template claim_bit<false, true>(std::memory_order_relaxed);
 				if (free_bit == std::numeric_limits<size_t>::max()) {
 					// No more free bits, we move.
-					if (static_cast<size_t>(window_index) + 1 - fifo.read_window.load(std::memory_order_acquire) == fifo.window_count) {
+					if (window_index + 1 - fifo.read_window.load(std::memory_order_acquire) == fifo.window_count) {
 						return false;
 					}
 					fifo.write_window.compare_exchange_strong(window_index, window_index + 1, std::memory_order_release, std::memory_order_relaxed);
@@ -187,15 +187,15 @@ public:
 		// TODO: Relax!
 		bool claim_new_block_read() {
 			size_t free_bit;
-			uint16_t window_index;
+			uint64_t window_index;
 			window_t* window;
 			do {
 				window_index = fifo.read_window.load(std::memory_order_acquire);
 				window = &fifo.buffer[window_index % fifo.window_count];
 				free_bit = window->filled_set.template claim_bit<true, false>(std::memory_order_relaxed);
 				if (free_bit == std::numeric_limits<size_t>::max()) {
-					uint16_t write_window = fifo.write_window.load();
-					if (write_window == static_cast<uint16_t>(window_index + 1)) {
+					uint64_t write_window = fifo.write_window.load();
+					if (write_window == window_index + 1) {
 						if (!fifo.buffer[write_window % fifo.window_count].filled_set.any()) {
 							return false;
 						}
