@@ -40,9 +40,8 @@ private:
 	static_assert(sizeof(std::atomic<T>) == 8);
 
 	struct alignas(8) header_t {
-		// 32 bits epoch, 16 bits read begin index, 16 bits write index
+		// 16 bits epoch, 16 bits read begin index, 16 bits read end index, 16 bits write index
 		std::atomic_uint64_t epoch_and_indices;
-		std::atomic_uint16_t read_finished_index;
 	};
 	// TODO
 	//static_assert(sizeof(header_t) == 8);
@@ -91,13 +90,13 @@ public:
 			window_t& window = buffer[i];
 			for (size_t j = 0; j < BLOCKS_PER_WINDOW; j++) {
 				header_t& header = window.blocks[j].header;
-				header.epoch_and_indices = (window_count + i) << 32;
+				header.epoch_and_indices = (window_count + i) << 48;
 			}
 		}
 		window_t& window = buffer[0];
 		for (size_t j = 0; j < BLOCKS_PER_WINDOW; j++) {
 			header_t& header = window.blocks[j].header;
-			header.epoch_and_indices = (window_count * 2) << 32;
+			header.epoch_and_indices = (window_count * 2) << 48;
 		}
 	}
 
@@ -121,7 +120,7 @@ public:
 
 		// Doing it like this allows the push code to grab a new block instead of requiring special cases for first-time initialization.
 		// An already active block will always trigger a check.
-		static inline block_t dummy_block{header_t{0xffffull << 32, 0}, {}};
+		static inline block_t dummy_block{header_t{0xffffull << 48}, {}};
 	
 		block_t* read_block = &dummy_block;
 		block_t* write_block = &dummy_block;
@@ -209,7 +208,7 @@ public:
 
 								block_t& block = new_window.blocks[i];
 								uint64_t ei = block.header.epoch_and_indices; // TODO: We know what we want here, save the load!
-								if ((ei >> 32) == (write_window & 0xffff'ffff) && (ei & 0xffff) == 0 && block.header.epoch_and_indices.compare_exchange_strong(ei, (write_window + fifo.window_count) << 32)) {
+								if ((ei >> 48) == (write_window & 0xffff) && (ei & 0xffff) == 0 && block.header.epoch_and_indices.compare_exchange_strong(ei, (write_window + fifo.window_count) << 48)) {
 									// If any of these checks fails, the block was claimed and written to in the meantime, so we have it be read normally as well.
 								}
 							}
@@ -242,7 +241,7 @@ public:
 			uint16_t index = 0; // TODO: Don't initialize.
 			bool claimed = false;
 			do {
-				if (ei >> 32 != (write_window & 0xffff'ffff)
+				if (ei >> 48 != (write_window & 0xffff)
 						|| (index = (ei & 0xffff)) >= CELLS_PER_BLOCK) {
 					// TODO: We need this for the case where we claim a bit, but can't place an element inside,
 					// because the write window was already forced-moved.
@@ -271,14 +270,15 @@ public:
 			return true;
 		}
 
+		// TODO: Relax again.
 		std::optional<T> pop() {
 			header_t* header = &read_block->header;
 			uint64_t ei = header->epoch_and_indices.load(std::memory_order_acquire);
 			uint16_t index;
 
 			do {
-				if (ei >> 32 != (read_window & 0xffff'ffff)
-						|| (index = ((ei >> 16) & 0xffff)) >= (ei & 0xffff)) {
+				if (ei >> 48 != (read_window & 0xffff)
+						|| (index = ((ei >> 32) & 0xffff)) >= (ei & 0xffff)) {
 					if (!claim_new_block_read()) {
 						return std::nullopt;
 					}
@@ -286,20 +286,18 @@ public:
 					index = 0; // TODO: This is unnecessary.
 					ei = ~ei; // TODO: Better way to invalidate?
 				}
-			} while (!header->epoch_and_indices.compare_exchange_weak(ei, ei + (1 << 16), std::memory_order_seq_cst));
+			} while (!header->epoch_and_indices.compare_exchange_weak(ei, ei + (1ull << 32), std::memory_order_seq_cst));
 
 			T ret;
 			while ((ret = std::move(read_block->cells[index].load(std::memory_order_relaxed))) == 0) { }
 			read_block->cells[index].store(0, std::memory_order_relaxed);
 
-			uint16_t finished_index = header->read_finished_index.fetch_add(1, std::memory_order_relaxed) + 1;
+			uint16_t finished_index = static_cast<uint16_t>(header->epoch_and_indices.fetch_add(1 << 16, std::memory_order_relaxed) >> 16) + 1;
 			if (finished_index == (ei & 0xffff)) {
 				// Apply local read index update.
-				ei = (ei & ~(0xffffull << 16)) | (static_cast<uint64_t>(finished_index) << 16);
+				ei = (ei & ~(0xffff'ffffull << 16)) | (static_cast<uint64_t>(finished_index) << 32) | (static_cast<uint64_t>(finished_index) << 16);
 				// Before we mark this block as empty, we make it unavailable for other readers and writers of this epoch.
-				if (header->epoch_and_indices.compare_exchange_strong(ei, (read_window + fifo.window_count) << 32, std::memory_order_seq_cst)) {
-					header->read_finished_index.store(0, std::memory_order_release);
-
+				if (header->epoch_and_indices.compare_exchange_strong(ei, (read_window + fifo.window_count) << 48, std::memory_order_seq_cst)) {
 					window_t& window = fifo.buffer[read_window % fifo.window_count];
 					auto diff = read_block - window.blocks;
 					window.filled_set.reset(diff, std::memory_order_relaxed);
