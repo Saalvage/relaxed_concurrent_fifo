@@ -5,7 +5,10 @@
 #include "concurrent_fifo.h"
 
 #ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
 #include "contenders/LCRQ/wrapper.h"
+#pragma GCC diagnostic pop
 #endif // __GNUC__
 
 #include <thread>
