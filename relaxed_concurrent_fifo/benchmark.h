@@ -25,8 +25,7 @@ struct benchmark_base {
 	static constexpr bool use_timing = true;
 
 	// Make sure we have enough space for at least 4 (not 3 so it's PO2) windows where each window supports HW threads with HW blocks each with HW cells each.
-	static inline size_t size = 4 * 64 * 64 * 64;
-	// TODO: Temporarily downsized!
+	static inline size_t size = 4 * std::thread::hardware_concurrency() * std::thread::hardware_concurrency() * std::thread::hardware_concurrency();
 };
 
 struct benchmark_default : benchmark_base {

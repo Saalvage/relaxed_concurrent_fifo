@@ -85,8 +85,8 @@ public:
 		if (window_count <= 2) {
 			throw std::runtime_error("FIFO parameters would result in less than 3 windows!");
 		}
-		read_window = static_cast<uint16_t>(window_count);
-		write_window = static_cast<uint16_t>(window_count + 1);
+		read_window = window_count;
+		write_window = window_count + 1;
 		for (size_t i = 1; i < window_count; i++) {
 			window_t& window = buffer[i];
 			for (size_t j = 0; j < BLOCKS_PER_WINDOW; j++) {
@@ -274,7 +274,7 @@ public:
 		std::optional<T> pop() {
 			header_t* header = &read_block->header;
 			uint64_t ei = header->epoch_and_indices.load(std::memory_order_acquire);
-			uint16_t index = 0;
+			uint16_t index;
 
 			do {
 				if (ei >> 32 != (read_window & 0xffff'ffff)
