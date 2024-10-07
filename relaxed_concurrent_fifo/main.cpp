@@ -4,6 +4,10 @@
 #include "relaxed_fifo.h"
 #include "concurrent_fifo.h"
 
+#ifdef __GNUC__
+#include "contenders/LCRQ/wrapper.h"
+#endif // __GNUC__
+
 #include <thread>
 #include <functional>
 #include <ranges>
@@ -196,6 +200,9 @@ int main() {
 		instances.push_back(std::make_unique<benchmark_provider_relaxed<4, benchmark_default>>("relaxed"));
 		instances.push_back(std::make_unique<benchmark_provider_generic<lock_fifo<uint64_t>, benchmark_default>>("lock"));
 		instances.push_back(std::make_unique<benchmark_provider_generic<concurrent_fifo<uint64_t>, benchmark_default>>("concurrent"));
+#ifdef __GNUC__
+		instances.push_back(std::make_unique<benchmark_provider_generic<lcrq<uint64_t>, benchmark_default>>("lcrq"));
+#endif // __GNUC__
 		run_benchmark("comp", instances, { 0.5 }, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
 	} else if (OVERRIDE_CHOICE == 2 || (OVERRIDE_CHOICE == 0 && input == 2)) {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
@@ -218,9 +225,6 @@ int main() {
 		instances.push_back(std::make_unique<benchmark_provider_relaxed<4, benchmark_empty>>("relaxed"));
 		run_benchmark("empty", instances, {1}, processor_counts, TEST_ITERATIONS, 0);
 	}
-
-	std::cout << "Done" << std::endl;
-	std::this_thread::sleep_for(std::chrono::hours(44444444));
 
 	return 0;
 }
