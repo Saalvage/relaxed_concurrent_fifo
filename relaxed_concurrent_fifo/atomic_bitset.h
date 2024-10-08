@@ -53,8 +53,8 @@ private:
             if (counted == actual_size) {
                 return std::numeric_limits<size_t>::max();
             }
-        	size_t original_index = (initial_rot + i + counted) % actual_size;
-        	if (!SET || set_bit_atomic<!IS_SET>(data, original_index, order)) {
+            size_t original_index = (initial_rot + i + counted) % actual_size;
+            if (!SET || set_bit_atomic<!IS_SET>(data, original_index, order)) {
                 return original_index;
             }
             rotated >>= ++counted;
@@ -127,11 +127,12 @@ public:
         return std::numeric_limits<size_t>::max();
     }
 
+    // Simple, alternative implementation for claim_bit.
     template <bool IS_SET, bool SET>
     size_t claim_bit_simple(std::memory_order order = std::memory_order_seq_cst) {
         static thread_local std::random_device dev;
         static thread_local std::minstd_rand rng{ dev() };
-    	static thread_local std::uniform_int_distribution dist_inner{ 0, static_cast<int>(N - 1) };
+        static thread_local std::uniform_int_distribution dist_inner{ 0, static_cast<int>(N - 1) };
         static thread_local std::uniform_int_distribution dist_outer{ 0, static_cast<int>(array_members - 1) };
 
         auto offset_outer = dist_outer(rng);
@@ -142,12 +143,12 @@ public:
         for (size_t i = 0; i < array_members; i++) {
             auto index_outer = (i + offset_outer) % array_members;
             auto val = data[index_outer].load(order);
-	        for (size_t j = 0; j < BITS_IN_VAL; j++) {
+            for (size_t j = 0; j < BITS_IN_VAL; j++) {
                 auto index_inner = (j + offset_inner) % BITS_IN_VAL;
                 if (static_cast<bool>(val & (1 << index_inner)) == IS_SET && (!SET || set_bit_atomic<!IS_SET>(data[index_outer], index_inner, order))) {
                     return (index_outer * BITS_IN_VAL + index_inner) % N;
                 }
-	        }
+            }
         }
 
         return std::numeric_limits<size_t>::max();

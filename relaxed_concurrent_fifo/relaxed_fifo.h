@@ -43,8 +43,7 @@ private:
 		// 16 bits epoch, 16 bits read begin index, 16 bits read end index, 16 bits write index
 		std::atomic_uint64_t epoch_and_indices;
 	};
-	// TODO
-	//static_assert(sizeof(header_t) == 8);
+	static_assert(sizeof(header_t) == 8);
 
 	struct block_t {
 		header_t header;
@@ -132,27 +131,6 @@ public:
 
 		friend relaxed_fifo;
 
-		std::random_device dev;
-		std::minstd_rand rng{dev()};
-		// TODO: Check template parameter here.
-		std::uniform_int_distribution<size_t> dist{0, BLOCKS_PER_WINDOW - 1};
-
-		// set: true if we want bits that are 0
-		// instantly_write: true if we want to instantly set the given bit
-		template <bool set, bool instantly_write = true>
-		size_t claim_free_bit(atomic_bitset<BLOCKS_PER_WINDOW>& bits) {
-			auto off = dist(rng);
-			for (size_t i = 0; i < bits.size(); i++) {
-				auto idx = (i + off) % bits.size();
-				if (instantly_write
-						? set ? bits.set(idx, std::memory_order_relaxed) : bits.reset(idx, std::memory_order_relaxed)
-						: set ? !bits.test(idx, std::memory_order_relaxed) : bits.test(idx, std::memory_order_relaxed)) {
-					return idx;
-				}
-			}
-			return std::numeric_limits<size_t>::max();
-		}
-
 		bool claim_new_block_write() {
 			size_t free_bit;
 			uint64_t window_index;
@@ -238,53 +216,39 @@ public:
 			uint64_t ei = header->epoch_and_indices.load(std::memory_order_relaxed);
 			uint16_t index = 0; // TODO: Don't initialize.
 			bool claimed = false;
-			do {
-				if (ei >> 48 != (write_window & 0xffff)
-						|| (index = (ei & 0xffff)) >= CELLS_PER_BLOCK) {
-					// TODO: We need this for the case where we claim a bit, but can't place an element inside,
-					// because the write window was already forced-moved.
-					// Maybe we could instead detect this elsewhere? (E.g. when encountering the same situation on claiming a new read block)
-					// TODO: This also still fails very sporadically.
-					if (claimed && index == 0) {
-						// We're abandoning an empty block!
-						window_t& window = fifo.buffer[write_window % fifo.window_count];
-						auto diff = write_block - window.blocks;
-						window.filled_set.reset(diff, std::memory_order_relaxed);
-					}
-					if (!claim_new_block_write()) {
-						return false;
-					}
-					claimed = true;
-					header = &write_block->header;
-					// Keep wie to iterate once more.
-					index = 0; // TODO: This is unnecessary.
-					ei = ~ei; // TODO: Better way to invalidate?
+			while (ei >> 48 != (write_window & 0xffff) || (index = (ei & 0xffff)) >= CELLS_PER_BLOCK || !header->epoch_and_indices.compare_exchange_weak(ei, ei + 1, std::memory_order_relaxed)) {
+				if (claimed && index == 0) {
+					// We're abandoning an empty block!
+					window_t& window = fifo.buffer[write_window % fifo.window_count];
+					auto diff = write_block - window.blocks;
+					window.filled_set.reset(diff, std::memory_order_relaxed);
 				}
-			// TODO: We can assume a failure here means we need a new block. Use for optimization?
-			} while (!header->epoch_and_indices.compare_exchange_weak(ei, ei + 1, std::memory_order_relaxed));
+				if (!claim_new_block_write()) {
+					return false;
+				}
+				claimed = true;
+				header = &write_block->header;
+				ei = header->epoch_and_indices.load(std::memory_order_relaxed);
+			}
 
 			write_block->cells[index].store(std::move(t), std::memory_order_relaxed);
 
 			return true;
 		}
 
-		// TODO: Relax again.
 		std::optional<T> pop() {
 			header_t* header = &read_block->header;
 			uint64_t ei = header->epoch_and_indices.load(std::memory_order_relaxed);
 			uint16_t index;
 
-			do {
-				if (ei >> 48 != (read_window & 0xffff)
-						|| (index = ((ei >> 32) & 0xffff)) >= (ei & 0xffff)) {
-					if (!claim_new_block_read()) {
-						return std::nullopt;
-					}
-					header = &read_block->header;
-					index = 0; // TODO: This is unnecessary.
-					ei = ~ei; // TODO: Better way to invalidate?
+			while (ei >> 48 != (read_window & 0xffff) || (index = ((ei >> 32) & 0xffff)) >= (ei & 0xffff)
+				|| !header->epoch_and_indices.compare_exchange_weak(ei, ei + (1ull << 32), std::memory_order_relaxed)) {
+				if (!claim_new_block_read()) {
+					return std::nullopt;
 				}
-			} while (!header->epoch_and_indices.compare_exchange_weak(ei, ei + (1ull << 32), std::memory_order_relaxed));
+				header = &read_block->header;
+				ei = header->epoch_and_indices.load(std::memory_order_relaxed);
+			}
 
 			T ret;
 			while ((ret = std::move(read_block->cells[index].load(std::memory_order_relaxed))) == 0) { }
