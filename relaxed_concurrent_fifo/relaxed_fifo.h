@@ -21,14 +21,21 @@ constexpr size_t CACHE_SIZE =
 	64;
 #endif // __cpp_lib_hardware_interference_size
 
-template <typename T, size_t BLOCKS_PER_WINDOW_RAW = 8, size_t CELLS_PER_BLOCK = CACHE_SIZE / sizeof(T) - 1>
+template <typename T, size_t BLOCKS_PER_WINDOW_RAW = 8, size_t CELLS_PER_BLOCK = CACHE_SIZE / sizeof(T) - 1, typename BITSET_TYPE = uint8_t>
 class relaxed_fifo {
 private:
-	// TODO: Do properly, we need multiples of 8 for the bitset to work correctly.
-	static constexpr size_t BLOCKS_PER_WINDOW = std::max<size_t>(8, BLOCKS_PER_WINDOW_RAW);
+	static constexpr size_t make_multiple(size_t val, size_t multiple_of) {
+		size_t ret = multiple_of;
+		while (ret < val) {
+			ret += multiple_of;
+		}
+		return ret;
+	}
 
-	// TODO: Optimize modulo.
+	static constexpr size_t BLOCKS_PER_WINDOW = make_multiple(BLOCKS_PER_WINDOW_RAW, sizeof(BITSET_TYPE) * 8);
+
 	const size_t window_count;
+	const size_t window_count_mod_mask;
 
 	size_t size() const {
 		return window_count * BLOCKS_PER_WINDOW * CELLS_PER_BLOCK;
@@ -52,19 +59,20 @@ private:
 	static_assert(sizeof(block_t) == CELLS_PER_BLOCK * sizeof(T) + sizeof(header_t));
 
 	struct window_t {
-		// While writing these two sets are consistent.
-		// While reading a block can be occupied but it can still be filled. (Filled is a superset of occupied.)
-		atomic_bitset<BLOCKS_PER_WINDOW> filled_set;
+		atomic_bitset<BLOCKS_PER_WINDOW, BITSET_TYPE> filled_set;
 		block_t blocks[BLOCKS_PER_WINDOW];
 	};
 
 	std::unique_ptr<window_t[]> buffer;
-	
+
+	window_t& get_window(size_t index) const {
+		return buffer[index & window_count_mod_mask];
+	}
+
 	std::atomic_uint64_t read_window;
 	std::atomic_uint64_t write_window;
 
-	// 0 is a reserved id!
-	std::atomic<handle_id> latest_handle_id = 1;
+	std::atomic<handle_id> latest_handle_id = 0;
 	handle_id get_handle_id() {
 		return latest_handle_id++;
 	}
@@ -78,7 +86,7 @@ private:
 	}
 
 public:
-	relaxed_fifo(size_t size) : window_count(make_po2(size / BLOCKS_PER_WINDOW / CELLS_PER_BLOCK)) {
+	relaxed_fifo(size_t size) : window_count(make_po2(size / BLOCKS_PER_WINDOW / CELLS_PER_BLOCK)), window_count_mod_mask(window_count - 1) {
 		buffer = std::make_unique<window_t[]>(window_count);
 		if (window_count <= 2) {
 			throw std::runtime_error("FIFO parameters would result in less than 3 windows!");
@@ -104,8 +112,8 @@ public:
 			<< "Read: " << read_window << "; Write: " << write_window << '\n';
 		for (size_t i = 0; i < window_count; i++) {
 			for (size_t j = 0; j < BLOCKS_PER_WINDOW; j++) {
-				header_t& header = buffer[i].blocks[j].header;
-				std::cout << header.epoch_and_indices << " | ";
+				uint64_t val = buffer[i].blocks[j].header.epoch_and_indices;
+				std::cout << (val >> 48) << " " << ((val >> 32) & 0xffff) << " " << ((val >> 16) & 0xffff) << " " << (val & 0xffff) << " | ";
 			}
 			std::cout << "\n======================\n";
 		}
@@ -137,7 +145,7 @@ public:
 			window_t* window;
 			do {
 				window_index = fifo.write_window.load(std::memory_order_relaxed);
-				window = &fifo.buffer[window_index % fifo.window_count];
+				window = &fifo.get_window(window_index);
 				free_bit = window->filled_set.template claim_bit<false, true>(std::memory_order_relaxed);
 				if (free_bit == std::numeric_limits<size_t>::max()) {
 					// No more free bits, we move.
@@ -164,12 +172,12 @@ public:
 			window_t* window;
 			do {
 				window_index = fifo.read_window.load(std::memory_order_relaxed);
-				window = &fifo.buffer[window_index % fifo.window_count];
+				window = &fifo.get_window(window_index);
 				free_bit = window->filled_set.template claim_bit<true, false>(std::memory_order_relaxed);
 				if (free_bit == std::numeric_limits<size_t>::max()) {
 					uint64_t write_window = fifo.write_window.load(std::memory_order_relaxed);
 					if (write_window == window_index + 1) {
-						if (!fifo.buffer[write_window % fifo.window_count].filled_set.any(std::memory_order_relaxed)) {
+						if (!fifo.get_window(write_window).filled_set.any(std::memory_order_relaxed)) {
 							return false;
 						}
 						if (fifo.write_window.compare_exchange_strong(write_window, write_window + 1)) {
@@ -177,7 +185,7 @@ public:
 							// Before we move the read window, let's invalidate all unclaimed write epochs in the blocks.
 							// TODO: We should be able to do this AFTER the moving the read window, saving one other thread from potentially
 							// having to move it in the meantime.
-							window_t& new_window = fifo.buffer[write_window % fifo.window_count];
+							window_t& new_window = fifo.get_window(write_window);
 							for (size_t i = 0; i < BLOCKS_PER_WINDOW; i++) {
 								if (new_window.filled_set.test(i, std::memory_order_relaxed)) {
 									continue;
@@ -214,12 +222,16 @@ public:
 
 			header_t* header = &write_block->header;
 			uint64_t ei = header->epoch_and_indices.load(std::memory_order_relaxed);
-			uint16_t index = 0; // TODO: Don't initialize.
+			uint16_t index;
 			bool claimed = false;
 			while (ei >> 48 != (write_window & 0xffff) || (index = (ei & 0xffff)) >= CELLS_PER_BLOCK || !header->epoch_and_indices.compare_exchange_weak(ei, ei + 1, std::memory_order_relaxed)) {
-				if (claimed && index == 0) {
+				// TODO: We need this for the case where we claim a bit, but can't place an element inside,
+				// because the write window was already forced-moved.
+				// Maybe we could instead detect this elsewhere? (E.g. when encountering the same situation on claiming a new read block)
+				// TODO: This also still fails very sporadically.
+				if (claimed && (index = (ei & 0xffff)) == 0) {
 					// We're abandoning an empty block!
-					window_t& window = fifo.buffer[write_window % fifo.window_count];
+					window_t& window = fifo.get_window(write_window);
 					auto diff = write_block - window.blocks;
 					window.filled_set.reset(diff, std::memory_order_relaxed);
 				}
@@ -260,7 +272,7 @@ public:
 				ei = (ei & (0xffffull << 48)) | (static_cast<uint64_t>(finished_index) << 32) | (static_cast<uint64_t>(finished_index) << 16) | finished_index;
 				// Before we mark this block as empty, we make it unavailable for other readers and writers of this epoch.
 				if (header->epoch_and_indices.compare_exchange_strong(ei, (read_window + fifo.window_count) << 48, std::memory_order_relaxed)) {
-					window_t& window = fifo.buffer[read_window % fifo.window_count];
+					window_t& window = fifo.get_window(read_window);
 					auto diff = read_block - window.blocks;
 					window.filled_set.reset(diff, std::memory_order_relaxed);
 
