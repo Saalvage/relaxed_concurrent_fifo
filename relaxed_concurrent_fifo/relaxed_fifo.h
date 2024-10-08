@@ -180,19 +180,18 @@ public:
 			return true;
 		}
 
-		// TODO: Relax!
 		bool claim_new_block_read() {
 			size_t free_bit;
 			uint64_t window_index;
 			window_t* window;
 			do {
-				window_index = fifo.read_window.load(std::memory_order_acquire);
+				window_index = fifo.read_window.load(std::memory_order_relaxed);
 				window = &fifo.buffer[window_index % fifo.window_count];
 				free_bit = window->filled_set.template claim_bit<true, false>(std::memory_order_relaxed);
 				if (free_bit == std::numeric_limits<size_t>::max()) {
-					uint64_t write_window = fifo.write_window.load();
+					uint64_t write_window = fifo.write_window.load(std::memory_order_relaxed);
 					if (write_window == window_index + 1) {
-						if (!fifo.buffer[write_window % fifo.window_count].filled_set.any()) {
+						if (!fifo.buffer[write_window % fifo.window_count].filled_set.any(std::memory_order_relaxed)) {
 							return false;
 						}
 						if (fifo.write_window.compare_exchange_strong(write_window, write_window + 1)) {
@@ -202,15 +201,14 @@ public:
 							// having to move it in the meantime.
 							window_t& new_window = fifo.buffer[write_window % fifo.window_count];
 							for (size_t i = 0; i < BLOCKS_PER_WINDOW; i++) {
-								if (new_window.filled_set.test(i)) {
+								if (new_window.filled_set.test(i, std::memory_order_relaxed)) {
 									continue;
 								}
 
 								block_t& block = new_window.blocks[i];
-								uint64_t ei = block.header.epoch_and_indices; // TODO: We know what we want here, save the load!
-								if ((ei >> 48) == (write_window & 0xffff) && (ei & 0xffff) == 0 && block.header.epoch_and_indices.compare_exchange_strong(ei, (write_window + fifo.window_count) << 48)) {
-									// If any of these checks fails, the block was claimed and written to in the meantime, so we have it be read normally as well.
-								}
+								uint64_t ei = write_window << 48; // All empty with current epoch.
+								// If this fails it was written to, it'll just be read normally in that case.
+								block.header.epoch_and_indices.compare_exchange_strong(ei, (write_window + fifo.window_count) << 48, std::memory_order_relaxed);
 							}
 						}
 #if LOG_WINDOW_MOVE
@@ -218,7 +216,7 @@ public:
 #endif // LOG_WINDOW_MOVE
 					}
 
-					fifo.read_window.compare_exchange_strong(window_index, window_index + 1);
+					fifo.read_window.compare_exchange_strong(window_index, window_index + 1, std::memory_order_relaxed);
 #if LOG_WINDOW_MOVE
 					std::cout << "Read move " << (window_index + 1) << std::endl;
 #endif // LOG_WINDOW_MOVE
@@ -263,7 +261,7 @@ public:
 					ei = ~ei; // TODO: Better way to invalidate?
 				}
 			// TODO: We can assume a failure here means we need a new block. Use for optimization?
-			} while (!header->epoch_and_indices.compare_exchange_weak(ei, ei + 1, std::memory_order_relaxed, std::memory_order_acquire));
+			} while (!header->epoch_and_indices.compare_exchange_weak(ei, ei + 1, std::memory_order_relaxed));
 
 			write_block->cells[index].store(std::move(t), std::memory_order_relaxed);
 
@@ -273,7 +271,7 @@ public:
 		// TODO: Relax again.
 		std::optional<T> pop() {
 			header_t* header = &read_block->header;
-			uint64_t ei = header->epoch_and_indices.load(std::memory_order_acquire);
+			uint64_t ei = header->epoch_and_indices.load(std::memory_order_relaxed);
 			uint16_t index;
 
 			do {
@@ -286,7 +284,7 @@ public:
 					index = 0; // TODO: This is unnecessary.
 					ei = ~ei; // TODO: Better way to invalidate?
 				}
-			} while (!header->epoch_and_indices.compare_exchange_weak(ei, ei + (1ull << 32), std::memory_order_seq_cst));
+			} while (!header->epoch_and_indices.compare_exchange_weak(ei, ei + (1ull << 32), std::memory_order_relaxed));
 
 			T ret;
 			while ((ret = std::move(read_block->cells[index].load(std::memory_order_relaxed))) == 0) { }
@@ -297,7 +295,7 @@ public:
 				// Apply local read index update.
 				ei = (ei & (0xffffull << 48)) | (static_cast<uint64_t>(finished_index) << 32) | (static_cast<uint64_t>(finished_index) << 16) | finished_index;
 				// Before we mark this block as empty, we make it unavailable for other readers and writers of this epoch.
-				if (header->epoch_and_indices.compare_exchange_strong(ei, (read_window + fifo.window_count) << 48, std::memory_order_seq_cst)) {
+				if (header->epoch_and_indices.compare_exchange_strong(ei, (read_window + fifo.window_count) << 48, std::memory_order_relaxed)) {
 					window_t& window = fifo.buffer[read_window % fifo.window_count];
 					auto diff = read_block - window.blocks;
 					window.filled_set.reset(diff, std::memory_order_relaxed);

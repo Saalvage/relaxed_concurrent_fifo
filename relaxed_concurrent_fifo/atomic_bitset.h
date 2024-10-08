@@ -95,9 +95,9 @@ public:
         return test(index);
     }
 
-    constexpr bool any() const {
+    constexpr bool any(std::memory_order order = std::memory_order_seq_cst) const {
         for (auto& elem : data) {
-            if (elem) {
+            if (elem.load(order)) {
                 return true;
             }
         }
