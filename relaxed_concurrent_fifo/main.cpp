@@ -124,19 +124,20 @@ void test_consistency(size_t fifo_size, size_t elements_per_thread, double prefi
 	}
 }
 
+template <size_t BITSET_SIZE = 128>
 void test_continuous_bitset_claim() {
 	auto gen = std::bind(std::uniform_int_distribution<>(0, 1), std::default_random_engine());
 	while (true) {
-		atomic_bitset<128> a;
-		std::vector<bool> b(128);
-		for (int i = 0; i < 128; i++) {
+		atomic_bitset<BITSET_SIZE> a;
+		std::vector<bool> b(BITSET_SIZE);
+		for (int i = 0; i < BITSET_SIZE; i++) {
 			if (gen()) {
 				a.set(i);
 				b[i] = true;
 			}
 		}
-		auto result = a.claim_bit<true, true>();
-		if (a[result] || !b[result]) {
+		auto result = a.template claim_bit<true, true>();
+		if (result != std::numeric_limits<size_t>::max() && (a[result] || !b[result])) {
 			throw std::runtime_error("Incorrect!");
 		}
 	}
