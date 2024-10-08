@@ -141,10 +141,10 @@ public:
 				free_bit = window->filled_set.template claim_bit<false, true>(std::memory_order_relaxed);
 				if (free_bit == std::numeric_limits<size_t>::max()) {
 					// No more free bits, we move.
-					if (window_index + 1 - fifo.read_window.load(std::memory_order_acquire) == fifo.window_count) {
+					if (window_index + 1 - fifo.read_window.load(std::memory_order_relaxed) == fifo.window_count) {
 						return false;
 					}
-					fifo.write_window.compare_exchange_strong(window_index, window_index + 1, std::memory_order_release, std::memory_order_relaxed);
+					fifo.write_window.compare_exchange_strong(window_index, window_index + 1, std::memory_order_relaxed);
 #if LOG_WINDOW_MOVE
 					std::cout << "Write move " << (window_index + 1) << std::endl;
 #endif // LOG_WINDOW_MOVE
