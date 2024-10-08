@@ -293,9 +293,9 @@ public:
 			read_block->cells[index].store(0, std::memory_order_relaxed);
 
 			uint16_t finished_index = static_cast<uint16_t>(header->epoch_and_indices.fetch_add(1 << 16, std::memory_order_relaxed) >> 16) + 1;
-			if (finished_index == (ei & 0xffff)) {
+			if (finished_index >= (ei & 0xffff)) {
 				// Apply local read index update.
-				ei = (ei & ~(0xffff'ffffull << 16)) | (static_cast<uint64_t>(finished_index) << 32) | (static_cast<uint64_t>(finished_index) << 16);
+				ei = (ei & (0xffffull << 48)) | (static_cast<uint64_t>(finished_index) << 32) | (static_cast<uint64_t>(finished_index) << 16) | finished_index;
 				// Before we mark this block as empty, we make it unavailable for other readers and writers of this epoch.
 				if (header->epoch_and_indices.compare_exchange_strong(ei, (read_window + fifo.window_count) << 48, std::memory_order_seq_cst)) {
 					window_t& window = fifo.buffer[read_window % fifo.window_count];
