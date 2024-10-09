@@ -47,12 +47,10 @@ private:
 	static_assert(sizeof(std::atomic<T>) == 8);
 
 	struct alignas(8) header_t {
-		// 15 bits epoch, 1 bit filled, 16 bits read begin index, 16 bits read end index, 16 bits write index
+		// 16 bits epoch, 16 bits read begin index, 16 bits read end index, 16 bits write index
 		std::atomic_uint64_t state;
 	};
 	static_assert(sizeof(header_t) == 8);
-
-	static constexpr uint64_t STATE_FILLED_MASK = 1ull << 48;
 
 	struct block_t {
 		header_t header;
@@ -75,7 +73,7 @@ private:
 				header_t& header = block.header;
 				uint64_t state = header.state.load(std::memory_order_relaxed);
 				// All cases in which the CAS could fail involve a claim by another handle.
-				if (static_cast<bool>(state & STATE_FILLED_MASK) == FILLED && (state >> 49) == epoch && (FILLED || header.state.compare_exchange_strong(state, state | STATE_FILLED_MASK | 1, std::memory_order_relaxed))) {
+				if (static_cast<bool>(state & 0xffff) == FILLED && (state >> 48) == epoch && (FILLED || header.state.compare_exchange_strong(state, state | 1, std::memory_order_relaxed))) {
 					assert(!FILLED ^ ((state & 0xffff) != 0));
 					return &block;
 				}
@@ -118,13 +116,13 @@ public:
 			window_t& window = buffer[i];
 			for (size_t j = 0; j < BLOCKS_PER_WINDOW; j++) {
 				header_t& header = window.blocks[j].header;
-				header.state = (window_count + i) << 49;
+				header.state = (window_count + i) << 48;
 			}
 		}
 		window_t& window = buffer[0];
 		for (size_t j = 0; j < BLOCKS_PER_WINDOW; j++) {
 			header_t& header = window.blocks[j].header;
-			header.state = (window_count * 2) << 49;
+			header.state = (window_count * 2) << 48;
 		}
 	}
 
@@ -134,7 +132,7 @@ public:
 		for (size_t i = 0; i < window_count; i++) {
 			for (size_t j = 0; j < BLOCKS_PER_WINDOW; j++) {
 				uint64_t val = buffer[i].blocks[j].header.state;
-				std::cout << (val >> 49) << " " << ((val >> 48) & 1) << " " << ((val >> 32) & 0xffff) << " " << ((val >> 16) & 0xffff) << " " << (val & 0xffff) << " | ";
+				std::cout << (val >> 48) << " " << ((val >> 32) & 0xffff) << " " << ((val >> 16) & 0xffff) << " " << (val & 0xffff) << " | ";
 			}
 			std::cout << "\n======================\n";
 		}
@@ -165,7 +163,7 @@ public:
 			uint64_t window_index;
 			do {
 				window_index = fifo.write_window.load(std::memory_order_relaxed);
-				found_block = fifo.get_window(window_index).template find_block<false>(window_index & 0x7fff);
+				found_block = fifo.get_window(window_index).template find_block<false>(window_index & 0xffff);
 				if (found_block == nullptr) {
 					// No more free blocks, we move.
 					if (window_index + 1 - fifo.read_window.load(std::memory_order_relaxed) == fifo.window_count) {
@@ -190,7 +188,7 @@ public:
 			uint64_t window_index;
 			do {
 				window_index = fifo.read_window.load(std::memory_order_relaxed);
-				found_block = fifo.get_window(window_index).template find_block<true>(window_index & 0x7fff);
+				found_block = fifo.get_window(window_index).template find_block<true>(window_index & 0xffff);
 				if (found_block == nullptr) {
 					bool found_any = true;
 					uint64_t write_window = fifo.write_window.load(std::memory_order_relaxed);
@@ -209,14 +207,14 @@ public:
 							for (size_t i = 0; i < BLOCKS_PER_WINDOW; i++) {
 								block_t& block = new_window.blocks[i];
 
-								if (block.header.state & STATE_FILLED_MASK) {
+								if (block.header.state & 0xffff) {
 									found_any = true;
 									continue;
 								}
 
-								uint64_t ei = write_window << 49; // All empty with current epoch.
+								uint64_t ei = write_window << 48; // All empty with current epoch.
 								// If this fails it was written to, it'll just be read normally in that case.
-								if (!block.header.state.compare_exchange_strong(ei, (write_window + fifo.window_count) << 49, std::memory_order_relaxed)) {
+								if (!block.header.state.compare_exchange_strong(ei, (write_window + fifo.window_count) << 48, std::memory_order_relaxed)) {
 									found_any = true;
 								}
 							}
@@ -251,7 +249,7 @@ public:
 			header_t* header = &write_block->header;
 			uint64_t ei = header->state.load(std::memory_order_relaxed);
 			uint16_t index;
-			if (ei >> 49 != (write_window & 0x7fff) || (index = (ei & 0xffff)) >= CELLS_PER_BLOCK || !header->state.compare_exchange_weak(ei, ei + 1, std::memory_order_relaxed)) {
+			if (ei >> 48 != (write_window & 0xffff) || (index = (ei & 0xffff)) >= CELLS_PER_BLOCK || !header->state.compare_exchange_weak(ei, ei + 1, std::memory_order_relaxed)) {
 				if (!claim_new_block_write()) {
 					return false;
 				}
@@ -268,7 +266,7 @@ public:
 			uint64_t ei = header->state.load(std::memory_order_relaxed);
 			uint16_t index;
 
-			while (ei >> 49 != (read_window & 0x7fff) || (index = ((ei >> 32) & 0xffff)) >= (ei & 0xffff)
+			while (ei >> 48 != (read_window & 0xffff) || (index = ((ei >> 32) & 0xffff)) >= (ei & 0xffff)
 				|| !header->state.compare_exchange_weak(ei, ei + (1ull << 32), std::memory_order_relaxed)) {
 				if (!claim_new_block_read()) {
 					return std::nullopt;
@@ -286,7 +284,7 @@ public:
 				// Apply local read index update.
 				ei = (ei & (0xffffull << 48)) | (static_cast<uint64_t>(finished_index) << 32) | (static_cast<uint64_t>(finished_index) << 16) | finished_index;
 				// Mark block as empty.
-				header->state.compare_exchange_strong(ei, (read_window + fifo.window_count) << 49, std::memory_order_relaxed);
+				header->state.compare_exchange_strong(ei, (read_window + fifo.window_count) << 48, std::memory_order_relaxed);
 				// TODO: Can this fail??
 			}
 
