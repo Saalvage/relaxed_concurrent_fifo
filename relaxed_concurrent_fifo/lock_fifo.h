@@ -23,7 +23,7 @@ private:
 	std::mutex mut;
 
 public:
-	lock_fifo(size_t capacity) : capacity(capacity) {
+	lock_fifo([[maybe_unused]] size_t thread_count, size_t capacity) : capacity(capacity) {
 		if (!is_po2(capacity)) {
 			throw std::runtime_error("Please only use capacities that are a power of two");
 		}

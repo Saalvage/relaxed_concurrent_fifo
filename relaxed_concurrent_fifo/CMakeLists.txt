@@ -2,8 +2,16 @@
 # project specific logic here.
 #
 
+set(sources
+  main.cpp
+)
+
+if(NOT MSVC)
+  set(sources ${sources} "contenders/scal/util/allocation.cc" "contenders/scal/util/random.cc" "contenders/scal/util/threadlocals.cc")
+endif()
+
 # Add source to this project's executable.
-add_executable (relaxed_concurrent_fifo "main.cpp")
+add_executable (relaxed_concurrent_fifo ${sources})
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET relaxed_concurrent_fifo PROPERTY CXX_STANDARD 20)
@@ -14,5 +22,3 @@ if(MSVC)
 else()
   target_compile_options(relaxed_concurrent_fifo PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
-
-# TODO: Add tests and install targets if needed.

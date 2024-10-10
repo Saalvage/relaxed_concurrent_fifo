@@ -144,9 +144,9 @@ public:
 	virtual const std::string& get_name() const = 0;
 
 protected:
-	template <typename FIFO>
+	template <fifo FIFO>
 	static BENCHMARK test_single(size_t num_threads, size_t test_time_seconds, double prefill_amount) {
-		FIFO fifo{BENCHMARK::size};
+		FIFO fifo{num_threads, BENCHMARK::size};
 		auto handle = fifo.get_handle();
 		for (size_t i = 0; i < prefill_amount * BENCHMARK::size; i++) {
 			handle.push(i + 1);
@@ -194,7 +194,7 @@ protected:
 	}
 };
 
-template <typename FIFO, typename BENCHMARK>
+template <fifo FIFO, typename BENCHMARK>
 class benchmark_provider_generic : public benchmark_provider<BENCHMARK> {
 public:
 	benchmark_provider_generic(std::string name) : name(std::move(name)) { }

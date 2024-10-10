@@ -79,7 +79,8 @@ private:
 	}
 
 public:
-	relaxed_fifo(size_t size) : window_count(make_po2(size / BLOCKS_PER_WINDOW / CELLS_PER_BLOCK)) {
+	// TODO: Remove unusued parameter!
+	relaxed_fifo([[maybe_unused]] size_t thread_count, size_t size) : window_count(make_po2(size / BLOCKS_PER_WINDOW / CELLS_PER_BLOCK)) {
 		buffer = std::make_unique<window_t[]>(window_count);
 		if (window_count <= 2) {
 			throw std::runtime_error("FIFO parameters would result in less than 3 windows!");

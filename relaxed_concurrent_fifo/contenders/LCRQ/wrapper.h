@@ -1,27 +1,23 @@
 #ifndef LCRQ_WRAPPER_H_INCLUDED
 #define LCRQ_WRAPPER_H_INCLUDED
 
-#include "LCRQueue.hpp"
-
-template <typename T>
-struct lcrq {
+template <typename T, template <typename> typename FIFO>
+struct adapter {
 private:
-	LCRQueue<void> queue{};
+	FIFO<void> queue;
 
-	int curr_thread_id = 0;
+	std::atomic_int curr_thread_id = 0;
 
 public:
-	lcrq(size_t) {
-		
-	}
+	adapter(size_t thread_count, size_t) : queue{static_cast<int>(thread_count)} { }
 
 	struct handle {
 	private:
-		LCRQueue<void>* queue;
+		FIFO<void>* queue;
 		int thread_id;
 
 	public:
-		handle(LCRQueue<void>* queue, int thread_id) : queue(queue), thread_id(thread_id) { }
+		handle(FIFO<void>* queue, int thread_id) : queue(queue), thread_id(thread_id) { }
 
 		bool push(const T& t) {
 			queue->enqueue(reinterpret_cast<void*>(t), thread_id);

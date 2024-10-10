@@ -4,10 +4,20 @@
 #include "relaxed_fifo.h"
 #include "concurrent_fifo.h"
 
+#include "contenders/LCRQ/wrapper.h"
+#include "contenders/LCRQ/MichaelScottQueue.hpp"
+
 #ifdef __GNUC__
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
-#include "contenders/LCRQ/wrapper.h"
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+
+#include "contenders/LCRQ/LCRQueue.hpp"
+
+template <typename T>
+using LCRQWrapped = LCRQueue<T>;
+
+#include "contenders/scal/scal_wrapper.h"
 #pragma GCC diagnostic pop
 #endif // __GNUC__
 
@@ -200,12 +210,14 @@ int main() {
 
 	if (OVERRIDE_CHOICE == 1 || (OVERRIDE_CHOICE == 0 && input == 1)) {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<4, benchmark_default>>("relaxed"));
-		instances.push_back(std::make_unique<benchmark_provider_generic<lock_fifo<uint64_t>, benchmark_default>>("lock"));
-		instances.push_back(std::make_unique<benchmark_provider_generic<concurrent_fifo<uint64_t>, benchmark_default>>("concurrent"));
+		//instances.push_back(std::make_unique<benchmark_provider_relaxed<4, benchmark_default>>("relaxed"));
+		//instances.push_back(std::make_unique<benchmark_provider_generic<lock_fifo<uint64_t>, benchmark_default>>("lock"));
+		//instances.push_back(std::make_unique<benchmark_provider_generic<concurrent_fifo<uint64_t>, benchmark_default>>("concurrent"));
 #ifdef __GNUC__
-		instances.push_back(std::make_unique<benchmark_provider_generic<lcrq<uint64_t>, benchmark_default>>("lcrq"));
+		instances.push_back(std::make_unique<benchmark_provider_generic<scal_wrapper<uint64_t>, benchmark_default>>("bs-kfifo"));
+		instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, LCRQWrapped>, benchmark_default>>("lcrq"));
 #endif // __GNUC__
+		instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, MichaelScottQueue>, benchmark_default>>("msq"));
 		run_benchmark("comp", instances, { 0.5 }, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
 	} else if (OVERRIDE_CHOICE == 2 || (OVERRIDE_CHOICE == 0 && input == 2)) {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
