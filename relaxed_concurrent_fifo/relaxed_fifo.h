@@ -86,11 +86,8 @@ private:
 	}
 
 public:
-	relaxed_fifo(size_t size) : window_count(make_po2(size / BLOCKS_PER_WINDOW / CELLS_PER_BLOCK)), window_count_mod_mask(window_count - 1) {
+	relaxed_fifo(size_t size) : window_count(std::max<size_t>(4, make_po2(size / BLOCKS_PER_WINDOW / CELLS_PER_BLOCK))), window_count_mod_mask(window_count - 1) {
 		buffer = std::make_unique<window_t[]>(window_count);
-		if (window_count <= 2) {
-			throw std::runtime_error("FIFO parameters would result in less than 3 windows!");
-		}
 		read_window = window_count;
 		write_window = window_count + 1;
 		for (size_t i = 1; i < window_count; i++) {
