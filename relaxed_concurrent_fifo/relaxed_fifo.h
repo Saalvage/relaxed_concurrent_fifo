@@ -177,23 +177,18 @@ public:
 						if (!fifo.get_window(write_window).filled_set.any(std::memory_order_relaxed)) {
 							return false;
 						}
-						if (fifo.write_window.compare_exchange_strong(write_window, write_window + 1)) {
-							// We force-moved the write window, there might be unclaimed blocks in the old one.
-							// Before we move the read window, let's invalidate all unclaimed write epochs in the blocks.
-							// TODO: We should be able to do this AFTER the moving the read window, saving one other thread from potentially
-							// having to move it in the meantime.
-							window_t& new_window = fifo.get_window(write_window);
-							for (size_t i = 0; i < BLOCKS_PER_WINDOW; i++) {
-								if (new_window.filled_set.test(i, std::memory_order_relaxed)) {
-									continue;
-								}
+						// Before we force-move the write window, there might be unclaimed blocks in the current one.
+						// We need to make sure we clean those up BEFORE we move the write window in order to prevent
+						// the read window from being moved before all blocks have either been claimed or invalidated.
+						window_t& new_window = fifo.get_window(write_window);
+						uint64_t next_epoch = (write_window + fifo.window_count) << 48;
+						for (size_t i = 0; i < BLOCKS_PER_WINDOW; i++) {
+							// We can't rely on the bitset here because it might be experiencing a spurious claim.
 
-								block_t& block = new_window.blocks[i];
-								uint64_t ei = write_window << 48; // All empty with current epoch.
-								// If this fails it was written to, it'll just be read normally in that case.
-								block.header.epoch_and_indices.compare_exchange_strong(ei, (write_window + fifo.window_count) << 48, std::memory_order_relaxed);
-							}
+							uint64_t ei = write_window << 48; // All empty with current epoch.
+							new_window.blocks[i].header.epoch_and_indices.compare_exchange_strong(ei, next_epoch, std::memory_order_relaxed);
 						}
+						fifo.write_window.compare_exchange_strong(write_window, write_window + 1, std::memory_order_relaxed);
 #if LOG_WINDOW_MOVE
 						std::cout << "Write force move " << (write_window + 1) << std::endl;
 #endif // LOG_WINDOW_MOVE
@@ -222,10 +217,8 @@ public:
 			uint16_t index;
 			bool claimed = false;
 			while (ei >> 48 != (write_window & 0xffff) || (index = (ei & 0xffff)) >= CELLS_PER_BLOCK || !header->epoch_and_indices.compare_exchange_weak(ei, ei + 1, std::memory_order_relaxed)) {
-				// TODO: We need this for the case where we claim a bit, but can't place an element inside,
+				// We need this in case of a spurious claim where we claim a bit, but can't place an element inside,
 				// because the write window was already forced-moved.
-				// Maybe we could instead detect this elsewhere? (E.g. when encountering the same situation on claiming a new read block)
-				// TODO: This also still fails very sporadically.
 				if (claimed && (index = (ei & 0xffff)) == 0) {
 					// We're abandoning an empty block!
 					window_t& window = fifo.get_window(write_window);
