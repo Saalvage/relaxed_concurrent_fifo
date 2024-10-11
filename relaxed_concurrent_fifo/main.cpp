@@ -219,8 +219,5 @@ int main() {
 		run_benchmark("empty", instances, {1}, processor_counts, TEST_ITERATIONS, 0);
 	}
 
-	std::cout << "Done" << std::endl;
-	std::this_thread::sleep_for(std::chrono::hours(44444444));
-
 	return 0;
 }
