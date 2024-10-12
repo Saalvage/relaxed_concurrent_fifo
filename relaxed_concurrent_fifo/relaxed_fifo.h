@@ -59,8 +59,8 @@ private:
 	static_assert(sizeof(block_t) == CELLS_PER_BLOCK * sizeof(T) + sizeof(header_t));
 
 	struct window_t {
-		atomic_bitset<BLOCKS_PER_WINDOW, BITSET_TYPE> filled_set;
-		block_t blocks[BLOCKS_PER_WINDOW];
+		alignas(128) atomic_bitset<BLOCKS_PER_WINDOW, BITSET_TYPE> filled_set;
+		alignas(128) block_t blocks[BLOCKS_PER_WINDOW];
 	};
 
 	std::unique_ptr<window_t[]> buffer;
