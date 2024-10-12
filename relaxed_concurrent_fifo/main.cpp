@@ -222,7 +222,10 @@ int main() {
 
 	if (OVERRIDE_CHOICE == 1 || (OVERRIDE_CHOICE == 0 && input == 1)) {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 4, 7>>("relaxed"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 1, 7>>("bbq-1-7"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 2, 63>>("bbq-2-63"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 4, 127>>("bbq-4-127"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 8, 127>>("bbq-8-127"));
 		instances.push_back(std::make_unique<benchmark_provider_generic<lock_fifo<uint64_t>, benchmark_default>>("lock"));
 		instances.push_back(std::make_unique<benchmark_provider_generic<concurrent_fifo<uint64_t>, benchmark_default>>("concurrent"));
 		run_benchmark("comp", instances, { 0.5 }, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);

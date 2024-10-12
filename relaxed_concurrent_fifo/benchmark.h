@@ -93,8 +93,8 @@ private:
 public:
 	static constexpr bool use_timing = false;
 
-	static constexpr size_t CHUNK_SIZE  = 10'000;
-	static constexpr size_t CHUNK_COUNT =  5'000;
+	static constexpr size_t CHUNK_SIZE  = 5'000;
+	static constexpr size_t CHUNK_COUNT = 5'000;
 
 	uint64_t time_nanos; // Ignored.
 
@@ -172,9 +172,6 @@ public:
 		stream << r_avg << ',' << r_std << ',' << r_max << ',';
 		auto [d_avg, d_std, d_max] = analyze(delays);
 		stream << d_avg << ',' << d_std << ',' << d_max << ',';
-
-		std::cout << r_avg << ',' << r_std << ',' << r_max << std::endl;
-		std::cout << d_avg << ',' << d_std << ',' << d_max << std::endl;
 	}
 };
 
