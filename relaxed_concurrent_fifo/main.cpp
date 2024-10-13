@@ -193,6 +193,11 @@ int main() {
 
 	//test_consistency<8, 16>(20000, 200000, 0);
 
+	scal::SegmentQueue<uint64_t> a{ 1024 };
+	a.enqueue(2);
+	//uint64_t x;
+	//a.dequeue(&x);
+
 	std::vector<size_t> processor_counts;
 	for (size_t i = 1; i <= std::thread::hardware_concurrency(); i *= 2) {
 		processor_counts.emplace_back(i);
@@ -214,7 +219,7 @@ int main() {
 		//instances.push_back(std::make_unique<benchmark_provider_generic<lock_fifo<uint64_t>, benchmark_default>>("lock"));
 		//instances.push_back(std::make_unique<benchmark_provider_generic<concurrent_fifo<uint64_t>, benchmark_default>>("concurrent"));
 #ifdef __GNUC__
-		instances.push_back(std::make_unique<benchmark_provider_generic<scal_wrapper<uint64_t>, benchmark_default>>("bs-kfifo"));
+		instances.push_back(std::make_unique<benchmark_provider_generic<scal_wrapper<uint64_t, 1024>, benchmark_default>>("bs-kfifo"));
 		instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, LCRQWrapped>, benchmark_default>>("lcrq"));
 #endif // __GNUC__
 		instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, MichaelScottQueue>, benchmark_default>>("msq"));

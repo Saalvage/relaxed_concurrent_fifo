@@ -2,17 +2,17 @@
 #define BSKFIFO_WRAPPER_H_INCLUDED
 
 #include "boundedsize_kfifo.h"
+#include "segment_queue.h"
 
-template <typename T>
+template <typename T, size_t K>
 struct scal_wrapper {
 private:
-	scal::BoundedSizeKFifo<T> queue{};
+	scal::BoundedSizeKFifo<T> queue;
 
 	std::atomic_int curr_thread_id = 0;
 
 public:
-	// TODO: We want the k to be equivalent to our implementation.
-	scal_wrapper(size_t thread_count, size_t size) : queue{thread_count * 7 * 4, size / thread_count / 7 / 4 } { }
+	scal_wrapper(size_t thread_count, size_t size) : queue{thread_count * K, size / K / thread_count} { }
 
 	struct handle {
 	private:
