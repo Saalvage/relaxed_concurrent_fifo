@@ -27,3 +27,4 @@ with open(file) as file:
 for k, v in impls.items():
     for x, y in v.values.items():
         print(k + " " + str(x) + " " + str(statistics.mean(y)) + " " + str(statistics.stdev(y)))
+    print()

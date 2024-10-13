@@ -220,21 +220,28 @@ int main() {
 		processor_counts.emplace_back(i);
 	}
 
-	constexpr int OVERRIDE_CHOICE = 0;
 	constexpr int TEST_ITERATIONS = 5;
 	constexpr int TEST_TIME_SECONDS = 5;
 
 	int input;
-	if (OVERRIDE_CHOICE == 0) {
-		std::cout << "Which experiment to run?\n[1] FIFO Comparison\n[2] Parameter Tuning\n[3] Quality\n[4] Fill\n[5] Empty\n[6] Strong Scaling\nInput: ";
-		std::cin >> input;
-	}
+	std::cout << "Which experiment to run?\n"
+		"[1] FIFO Comparison\n"
+		"[2] Parameter Tuning\n"
+		"[3] Quality\n"
+		"[4] Fill\n"
+		"[5] Empty\n"
+		"[6] Strong Scaling\n"
+		"[7] Bitset Size Comparison\n"
+		"Input: ";
+	std::cin >> input;
 
-	if (OVERRIDE_CHOICE == 1 || (OVERRIDE_CHOICE == 0 && input == 1)) {
+	switch (input) {
+	case 1: {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
 		add_all_benchmarking(instances);
-		run_benchmark("comp", instances, { 0.5 }, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
-	} else if (OVERRIDE_CHOICE == 2 || (OVERRIDE_CHOICE == 0 && input == 2)) {
+		run_benchmark("comp", instances, {0.5}, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
+		} break;
+	case 2: {
 		std::cout << "Benchmarking performance" << std::endl;
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
 		add_all_parameter_tuning(instances);
@@ -243,20 +250,24 @@ int main() {
 		std::cout << "Benchmarking quality" << std::endl;
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_quality>>> instances_q;
 		add_all_parameter_tuning(instances_q);
-		run_benchmark("pt-quality", instances_q, { 0.5 }, { processor_counts.back() }, TEST_ITERATIONS, TEST_TIME_SECONDS);
-	} else if (OVERRIDE_CHOICE == 3 || (OVERRIDE_CHOICE == 0 && input == 3)) {
+		run_benchmark("pt-quality", instances_q, {0.5}, { processor_counts.back() }, TEST_ITERATIONS, 0);
+		} break;
+	case 3: {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_quality>>> instances;
 		add_all_benchmarking(instances);
 		run_benchmark("quality", instances, {0.5}, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
-	} else if (OVERRIDE_CHOICE == 4 || (OVERRIDE_CHOICE == 0 && input == 4)) {
+		} break;
+	case 4: {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_fill>>> instances;
 		add_all_benchmarking(instances);
 		run_benchmark("fill", instances, {0}, processor_counts, TEST_ITERATIONS, 0);
-	} else if (OVERRIDE_CHOICE == 5 || (OVERRIDE_CHOICE == 0 && input == 5)) {
+		} break;
+	case 5: {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_empty>>> instances;
 		add_all_benchmarking(instances);
 		run_benchmark("empty", instances, {1}, processor_counts, TEST_ITERATIONS, 0);
-	} else if (OVERRIDE_CHOICE == 6 || (OVERRIDE_CHOICE == 0 && input == 6)) {
+		} break;
+	case 6: {
 		static constexpr size_t THREADS = 128;
 
 		std::cout << "Benchmarking performance" << std::endl;
@@ -265,7 +276,7 @@ int main() {
 		instances.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 2 * THREADS, 63>, benchmark_default>>("bbq-2-63"));
 		instances.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 4 * THREADS, 127>, benchmark_default>>("bbq-4-127"));
 		instances.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 8 * THREADS, 127>, benchmark_default>>("bbq-8-127"));
-		run_benchmark("sc-performance", instances, {0.5}, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
+		run_benchmark("ss-performance", instances, {0.5}, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
 
 		std::cout << "Benchmarking quality" << std::endl;
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_quality>>> instances_q;
@@ -273,7 +284,28 @@ int main() {
 		instances_q.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 2 * THREADS, 63>, benchmark_quality>>("bbq-2-63"));
 		instances_q.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 4 * THREADS, 127>, benchmark_quality>>("bbq-4-127"));
 		instances_q.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 8 * THREADS, 127>, benchmark_quality>>("bbq-8-127"));
-		run_benchmark("sc-quality", instances_q, {0.5}, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
+		run_benchmark("ss-quality", instances_q, {0.5}, processor_counts, TEST_ITERATIONS, 0);
+		} break;
+	case 7: {
+		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 1, 7, uint8_t>>("8-bit-bbq-1-7"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 2, 63, uint8_t>>("8-bit-bbq-2-63"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 4, 127, uint8_t>>("8-bit-bbq-4-127"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 8, 127, uint8_t>>("8-bit-bbq-8-127"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 1, 7, uint16_t>>("16-bit-bbq-1-7"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 2, 63, uint16_t>>("16-bit-bbq-2-63"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 4, 127, uint16_t>>("16-bit-bbq-4-127"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 8, 127, uint16_t>>("16-bit-bbq-8-127"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 1, 7, uint32_t>>("32-bit-bbq-1-7"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 2, 63, uint32_t>>("32-bit-bbq-2-63"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 4, 127, uint32_t>>("32-bit-bbq-4-127"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 8, 127, uint32_t>>("32-bit-bbq-8-127"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 1, 7, uint64_t>>("64-bit-bbq-1-7"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 2, 63, uint64_t>>("64-bit-bbq-2-63"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 4, 127, uint64_t>>("64-bit-bbq-4-127"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 8, 127, uint64_t>>("64-bit-bbq-8-127"));
+		run_benchmark("bitset-sizes", instances, {0.5}, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
+		} break;
 	}
 
 	return 0;
