@@ -198,6 +198,16 @@ void add_all_parameter_tuning(std::vector<std::unique_ptr<benchmark_provider<BEN
 	instances.push_back(std::make_unique<benchmark_provider_relaxed<BENCHMARK, 16, 127>>("16,127"));
 }
 
+template <typename BENCHMARK>
+void add_all_benchmarking(std::vector<std::unique_ptr<benchmark_provider<BENCHMARK>>>& instances) {
+	instances.push_back(std::make_unique<benchmark_provider_relaxed<BENCHMARK, 1, 7>>("bbq-1-7"));
+	instances.push_back(std::make_unique<benchmark_provider_relaxed<BENCHMARK, 2, 63>>("bbq-2-63"));
+	instances.push_back(std::make_unique<benchmark_provider_relaxed<BENCHMARK, 4, 127>>("bbq-4-127"));
+	instances.push_back(std::make_unique<benchmark_provider_relaxed<BENCHMARK, 8, 127>>("bbq-8-127"));
+	instances.push_back(std::make_unique<benchmark_provider_generic<lock_fifo<uint64_t>, BENCHMARK>>("lock"));
+	instances.push_back(std::make_unique<benchmark_provider_generic<concurrent_fifo<uint64_t>, BENCHMARK>>("concurrent"));
+}
+
 int main() {
 #ifndef NDEBUG
 	std::cout << "Running in debug mode!" << std::endl;
@@ -211,7 +221,7 @@ int main() {
 	}
 
 	constexpr int OVERRIDE_CHOICE = 0;
-	constexpr int TEST_ITERATIONS = 1;
+	constexpr int TEST_ITERATIONS = 5;
 	constexpr int TEST_TIME_SECONDS = 5;
 
 	int input;
@@ -222,12 +232,7 @@ int main() {
 
 	if (OVERRIDE_CHOICE == 1 || (OVERRIDE_CHOICE == 0 && input == 1)) {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 1, 7>>("bbq-1-7"));
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 2, 63>>("bbq-2-63"));
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 4, 127>>("bbq-4-127"));
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 8, 127>>("bbq-8-127"));
-		instances.push_back(std::make_unique<benchmark_provider_generic<lock_fifo<uint64_t>, benchmark_default>>("lock"));
-		instances.push_back(std::make_unique<benchmark_provider_generic<concurrent_fifo<uint64_t>, benchmark_default>>("concurrent"));
+		add_all_benchmarking(instances);
 		run_benchmark("comp", instances, { 0.5 }, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
 	} else if (OVERRIDE_CHOICE == 2 || (OVERRIDE_CHOICE == 0 && input == 2)) {
 		std::cout << "Benchmarking performance" << std::endl;
@@ -241,15 +246,15 @@ int main() {
 		run_benchmark("pt-quality", instances_q, { 0.5 }, { processor_counts.back() }, TEST_ITERATIONS, TEST_TIME_SECONDS);
 	} else if (OVERRIDE_CHOICE == 3 || (OVERRIDE_CHOICE == 0 && input == 3)) {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_quality>>> instances;
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_quality, 4, 7>>("relaxed"));
+		add_all_benchmarking(instances);
 		run_benchmark("quality", instances, {0.5}, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
 	} else if (OVERRIDE_CHOICE == 4 || (OVERRIDE_CHOICE == 0 && input == 4)) {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_fill>>> instances;
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_fill, 4, 7>>("relaxed"));
+		add_all_benchmarking(instances);
 		run_benchmark("fill", instances, {0}, processor_counts, TEST_ITERATIONS, 0);
 	} else if (OVERRIDE_CHOICE == 5 || (OVERRIDE_CHOICE == 0 && input == 5)) {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_empty>>> instances;
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_empty, 4, 7>>("relaxed"));
+		add_all_benchmarking(instances);
 		run_benchmark("empty", instances, {1}, processor_counts, TEST_ITERATIONS, 0);
 	}
 
