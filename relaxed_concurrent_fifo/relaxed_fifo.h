@@ -6,7 +6,6 @@
 #include <atomic>
 #include <random>
 #include <new>
-#include <bitset>
 
 #include "atomic_bitset.h"
 

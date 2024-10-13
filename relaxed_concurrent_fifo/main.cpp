@@ -226,7 +226,7 @@ int main() {
 
 	int input;
 	if (OVERRIDE_CHOICE == 0) {
-		std::cout << "Which experiment to run?\n[1] FIFO Comparison\n[2] Parameter Tuning\n[3] Quality\n[4] Fill\n[5] Empty\nInput: ";
+		std::cout << "Which experiment to run?\n[1] FIFO Comparison\n[2] Parameter Tuning\n[3] Quality\n[4] Fill\n[5] Empty\n[6] Strong Scaling\nInput: ";
 		std::cin >> input;
 	}
 
@@ -256,6 +256,22 @@ int main() {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_empty>>> instances;
 		add_all_benchmarking(instances);
 		run_benchmark("empty", instances, {1}, processor_counts, TEST_ITERATIONS, 0);
+	} else if (OVERRIDE_CHOICE == 6 || (OVERRIDE_CHOICE == 0 && input == 6)) {
+		static constexpr size_t THREADS = 32;
+
+		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
+		instances.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, THREADS, 7>, benchmark_default>>("bbq-1-7"));
+		instances.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 2 * THREADS, 63>, benchmark_default>>("bbq-2-63"));
+		instances.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 4 * THREADS, 127>, benchmark_default>>("bbq-4-127"));
+		instances.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 8 * THREADS, 127>, benchmark_default>>("bbq-8-127"));
+		run_benchmark("sc-performance", instances, {0.5}, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
+
+		std::vector<std::unique_ptr<benchmark_provider<benchmark_quality>>> instances_q;
+		instances_q.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, THREADS, 7>, benchmark_quality>>("bbq-1-7"));
+		instances_q.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 2 * THREADS, 63>, benchmark_quality>>("bbq-2-63"));
+		instances_q.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 4 * THREADS, 127>, benchmark_quality>>("bbq-4-127"));
+		instances_q.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 8 * THREADS, 127>, benchmark_quality>>("bbq-8-127"));
+		run_benchmark("sc-quality", instances_q, {0.5}, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
 	}
 
 	return 0;
