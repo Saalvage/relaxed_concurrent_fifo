@@ -259,6 +259,7 @@ int main() {
 	} else if (OVERRIDE_CHOICE == 6 || (OVERRIDE_CHOICE == 0 && input == 6)) {
 		static constexpr size_t THREADS = 128;
 
+		std::cout << "Benchmarking performance" << std::endl;
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
 		instances.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, THREADS, 7>, benchmark_default>>("bbq-1-7"));
 		instances.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 2 * THREADS, 63>, benchmark_default>>("bbq-2-63"));
@@ -266,6 +267,7 @@ int main() {
 		instances.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 8 * THREADS, 127>, benchmark_default>>("bbq-8-127"));
 		run_benchmark("sc-performance", instances, {0.5}, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
 
+		std::cout << "Benchmarking quality" << std::endl;
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_quality>>> instances_q;
 		instances_q.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, THREADS, 7>, benchmark_quality>>("bbq-1-7"));
 		instances_q.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 2 * THREADS, 63>, benchmark_quality>>("bbq-2-63"));

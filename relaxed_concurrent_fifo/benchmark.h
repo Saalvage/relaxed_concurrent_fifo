@@ -94,7 +94,7 @@ public:
 	static constexpr bool use_timing = false;
 
 	static constexpr size_t CHUNK_SIZE  = 5'000;
-	static constexpr size_t CHUNK_COUNT = 5'000;
+	static constexpr size_t CHUNK_COUNT = 1'000;
 
 	uint64_t time_nanos; // Ignored.
 
