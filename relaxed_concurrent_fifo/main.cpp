@@ -257,7 +257,7 @@ int main() {
 		add_all_benchmarking(instances);
 		run_benchmark("empty", instances, {1}, processor_counts, TEST_ITERATIONS, 0);
 	} else if (OVERRIDE_CHOICE == 6 || (OVERRIDE_CHOICE == 0 && input == 6)) {
-		static constexpr size_t THREADS = 32;
+		static constexpr size_t THREADS = 128;
 
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
 		instances.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, THREADS, 7>, benchmark_default>>("bbq-1-7"));
