@@ -171,7 +171,7 @@ public:
 		auto [r_avg, r_std, r_max] = analyze(rank_errors);
 		stream << r_avg << ',' << r_std << ',' << r_max << ',';
 		auto [d_avg, d_std, d_max] = analyze(delays);
-		stream << d_avg << ',' << d_std << ',' << d_max << ',';
+		stream << d_avg << ',' << d_std << ',' << d_max;
 	}
 };
 
