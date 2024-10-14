@@ -2,10 +2,11 @@
 #define ATOMIC_BITSET_H_INCLUDED
 
 #include <cstdint>
-#include <type_traits>
 #include <array>
 #include <atomic>
 #include <cassert>
+#include <limits>
+#include <random>
 
 template <bool SET, typename T>
 constexpr bool set_bit_atomic(std::atomic<T>& data, size_t index, std::memory_order order = std::memory_order_seq_cst) {
@@ -34,7 +35,7 @@ private:
         for (size_t i = 0; i < bit_count; i += counted) {
             counted = IS_SET ? std::countr_zero(rotated) : std::countr_one(rotated);
             if (counted == bit_count) {
-                return std::numeric_limits<size_t>::max();
+                break;
             }
             size_t original_index = (initial_rot + i + counted) % bit_count;
             if (!SET || set_bit_atomic<!IS_SET>(data, original_index, order)) {
@@ -121,15 +122,13 @@ public:
         auto offset_outer = dist_outer(rng);
         auto offset_inner = dist_inner(rng);
 
-        constexpr size_t BITS_IN_VAL = 8 * sizeof(ARR_TYPE);
-
         for (size_t i = 0; i < array_members; i++) {
             auto index_outer = (i + offset_outer) % array_members;
             auto val = data[index_outer].load(order);
-            for (size_t j = 0; j < BITS_IN_VAL; j++) {
-                auto index_inner = (j + offset_inner) % BITS_IN_VAL;
+            for (size_t j = 0; j < bit_count; j++) {
+                auto index_inner = (j + offset_inner) % bit_count;
                 if (static_cast<bool>(val & (1 << index_inner)) == IS_SET && (!SET || set_bit_atomic<!IS_SET>(data[index_outer], index_inner, order))) {
-                    return (index_outer * BITS_IN_VAL + index_inner) % N;
+                    return (index_outer * bit_count + index_inner) % N;
                 }
             }
         }
