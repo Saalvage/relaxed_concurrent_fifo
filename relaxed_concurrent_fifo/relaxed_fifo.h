@@ -66,8 +66,8 @@ private:
 		return buffer[index & window_count_mod_mask];
 	}
 
-	std::atomic_uint64_t read_window;
-	std::atomic_uint64_t write_window;
+	alignas(128) std::atomic_uint64_t read_window;
+	alignas(128) std::atomic_uint64_t write_window;
 
 	static constexpr size_t make_po2(size_t size) {
 		size_t ret = 1;
