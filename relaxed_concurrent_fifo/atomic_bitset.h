@@ -31,17 +31,20 @@ private:
     template <bool IS_SET, bool SET>
     static constexpr size_t claim_bit_singular(std::atomic<ARR_TYPE>& data, int initial_rot, std::memory_order order) {
         auto rotated = std::rotr(data.load(order), initial_rot);
-        int counted;
-        for (size_t i = 0; i < bit_count; i += counted) {
-            counted = IS_SET ? std::countr_zero(rotated) : std::countr_one(rotated);
+        while (true) {
+            int counted = IS_SET ? std::countr_zero(rotated) : std::countr_one(rotated);
             if (counted == bit_count) {
                 break;
             }
-            size_t original_index = (initial_rot + i + counted) % bit_count;
+            size_t original_index = (initial_rot + counted) % bit_count;
             if (!SET || set_bit_atomic<!IS_SET>(data, original_index, order)) {
                 return original_index;
             }
-            rotated >>= ++counted;
+            if constexpr (IS_SET) {
+                rotated &= ~(1ull << counted);
+            } else {
+                rotated |= 1ull << counted;
+            }
         }
 
         return std::numeric_limits<size_t>::max();
