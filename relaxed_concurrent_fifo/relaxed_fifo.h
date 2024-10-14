@@ -114,7 +114,7 @@ public:
 
 		// Doing it like this allows the push code to grab a new block instead of requiring special cases for first-time initialization.
 		// An already active block will always trigger a check.
-		static inline block_t dummy_block{header_t{0xffffull << 48}, {}};
+		static inline thread_local block_t dummy_block{header_t{0xffffull << 48}, {}};
 	
 		block_t* read_block = &dummy_block;
 		block_t* write_block = &dummy_block;
