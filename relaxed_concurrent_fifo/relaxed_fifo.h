@@ -40,8 +40,6 @@ private:
 		return window_count * BLOCKS_PER_WINDOW * CELLS_PER_BLOCK;
 	}
 
-	using handle_id = uint8_t;
-
 	static_assert(sizeof(T) == 8);
 	static_assert(sizeof(std::atomic<T>) == 8);
 
@@ -70,11 +68,6 @@ private:
 
 	std::atomic_uint64_t read_window;
 	std::atomic_uint64_t write_window;
-
-	std::atomic<handle_id> latest_handle_id = 0;
-	handle_id get_handle_id() {
-		return latest_handle_id++;
-	}
 
 	static constexpr size_t make_po2(size_t size) {
 		size_t ret = 1;
@@ -119,8 +112,6 @@ public:
 	private:
 		relaxed_fifo& fifo;
 
-		handle_id id;
-
 		// Doing it like this allows the push code to grab a new block instead of requiring special cases for first-time initialization.
 		// An already active block will always trigger a check.
 		static inline block_t dummy_block{header_t{0xffffull << 48}, {}};
@@ -131,7 +122,7 @@ public:
 		uint64_t write_window = 0;
 		uint64_t read_window = 0;
 
-		handle(relaxed_fifo& fifo) : fifo(fifo), id(fifo.get_handle_id()) { }
+		handle(relaxed_fifo& fifo) : fifo(fifo) { }
 
 		friend relaxed_fifo;
 
