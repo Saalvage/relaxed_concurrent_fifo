@@ -152,16 +152,17 @@ void run_benchmark(const std::string& test_name, const std::vector<std::unique_p
 		std::cout << "Expected running time: " << prefill_amounts.size() * test_iterations * test_time_seconds * processor_counts.size() * instances.size() << " seconds" << std::endl;
 	}
 
-	for (auto prefill : prefill_amounts) {
-		std::cout << "Prefilling with " << prefill << std::endl;
-		std::ofstream file{std::format(format, test_name, prefill, std::chrono::round<std::chrono::seconds>(std::chrono::file_clock::now()))};
-		for (const auto& imp : instances) {
-			std::cout << "Testing " << imp->get_name() << std::endl;
-			for (auto i : processor_counts) {
-				std::cout << "With " << i << " processors" << std::endl;
-				for (auto res : imp->test(i, test_iterations, test_time_seconds, prefill)) {
+	for (auto i : std::views::iota(0, test_iterations)) {
+		std::cout << "Test run " << (i + 1) << " of " << test_iterations << std::endl;
+		for (auto prefill : prefill_amounts) {
+			std::cout << "Prefilling with " << prefill << std::endl;
+			std::ofstream file{ std::format(format, test_name, prefill, std::chrono::round<std::chrono::seconds>(std::chrono::file_clock::now())) };
+			for (const auto& imp : instances) {
+				std::cout << "Testing " << imp->get_name() << std::endl;
+				for (auto i : processor_counts) {
+					std::cout << "With " << i << " processors" << std::endl;
 					file << imp->get_name() << "," << i << ',';
-					res.output(file);
+					imp->test(i, test_time_seconds, prefill).output(file);
 					file << '\n';
 				}
 			}

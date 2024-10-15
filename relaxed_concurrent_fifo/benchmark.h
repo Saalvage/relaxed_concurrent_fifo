@@ -215,7 +215,7 @@ template <typename BENCHMARK>
 class benchmark_provider {
 public:
 	virtual ~benchmark_provider() = default;
-	virtual std::vector<BENCHMARK> test(size_t num_threads, size_t num_its, size_t test_time_seconds, double prefill_amount) const = 0;
+	virtual BENCHMARK test(size_t num_threads, size_t test_time_seconds, double prefill_amount) const = 0;
 	virtual const std::string& get_name() const = 0;
 
 protected:
@@ -278,12 +278,8 @@ public:
 		return name;
 	}
 
-	std::vector<BENCHMARK> test(size_t num_threads, size_t num_its, size_t test_time_seconds, double prefill_amount) const override {
-		std::vector<BENCHMARK> results(num_its, BENCHMARK(benchmark_info{num_threads, test_time_seconds}));
-		for (auto i : std::views::iota((size_t)0, num_its)) {
-			results[i] = benchmark_provider<BENCHMARK>::template test_single<FIFO>(num_threads, test_time_seconds, prefill_amount);
-		}
-		return results;
+	BENCHMARK test(size_t num_threads, size_t test_time_seconds, double prefill_amount) const override {
+		return benchmark_provider<BENCHMARK>::template test_single<FIFO>(num_threads, test_time_seconds, prefill_amount);
 	}
 
 private:
@@ -299,18 +295,7 @@ class benchmark_provider_relaxed : public benchmark_provider<BENCHMARK> {
 			return name;
 		}
 
-		std::vector<BENCHMARK> test(size_t num_threads, size_t num_its, size_t test_time_seconds, double prefill_amount) const override {
-			std::vector<BENCHMARK> results(num_its, BENCHMARK(benchmark_info{num_threads, test_time_seconds}));
-			for (auto i : std::views::iota((size_t)0, num_its)) {
-				results[i] = test_single_helper(num_threads, test_time_seconds, prefill_amount);
-			}
-			return results;
-		}
-
-	private:
-		std::string name;
-
-		static BENCHMARK test_single_helper(size_t num_threads, size_t test_time_seconds, double prefill_amount) {
+		BENCHMARK test(size_t num_threads, size_t test_time_seconds, double prefill_amount) const override {
 			switch (num_threads) {
 			case 1: return benchmark_provider<BENCHMARK>::template test_single<relaxed_fifo<size_t, 1 * BLOCK_MULTIPLIER, CELLS_PER_BLOCK, BITSET_TYPE>>(num_threads, test_time_seconds, prefill_amount);
 			case 2: return benchmark_provider<BENCHMARK>::template test_single<relaxed_fifo<size_t, 2 * BLOCK_MULTIPLIER, CELLS_PER_BLOCK, BITSET_TYPE>>(num_threads, test_time_seconds, prefill_amount);
@@ -324,6 +309,9 @@ class benchmark_provider_relaxed : public benchmark_provider<BENCHMARK> {
 			default: throw std::runtime_error("Unsupported thread count!");
 			}
 		}
+
+	private:
+		std::string name;
 };
 
 #endif // BENCHMARK_H_INCLUDED
