@@ -11,7 +11,7 @@
 template <bool SET, typename T>
 constexpr bool set_bit_atomic(std::atomic<T>& data, size_t index, std::memory_order order = std::memory_order_seq_cst) {
     T mask = static_cast<T>(1) << index;
-	if constexpr (SET) {
+    if constexpr (SET) {
         return !(data.fetch_or(mask, order) & mask);
     } else {
         return data.fetch_and(~mask, order) & mask;
@@ -29,22 +29,37 @@ private:
     static_assert(N % bit_count == 0, "Bit count must be dividable by size of array type!");
 
     template <bool IS_SET, bool SET>
-    static constexpr size_t claim_bit_singular(std::atomic<ARR_TYPE>& data, int initial_rot, std::memory_order order) {
-        auto rotated = std::rotr(data.load(order), initial_rot);
-        int counted;
-        while ((counted = IS_SET ? std::countr_zero(rotated) : std::countr_one(rotated)) != bit_count) {
-            size_t original_index = (initial_rot + counted) % bit_count;
-            if (!SET || set_bit_atomic<!IS_SET>(data, original_index, order)) {
-                return original_index;
+    static constexpr std::size_t claim_bit_singular(std::atomic<ARR_TYPE>& data, int initial_rot, std::memory_order order) {
+        auto raw = data.load(order);
+        ARR_TYPE rotated;
+        while (true) {
+            rotated = std::rotr(raw, initial_rot);
+            int counted = IS_SET ? std::countr_zero(rotated) : std::countr_one(rotated);
+            if (counted == bit_count) {
+                break;
             }
-            if constexpr (IS_SET) {
-                rotated &= ~(1ull << counted);
+            std::size_t original_index = (initial_rot + counted) % bit_count;
+            if constexpr (SET) {
+                ARR_TYPE test;
+                while (true) {
+                    if constexpr (IS_SET) {
+                        test = raw & ~(1ull << original_index);
+                    } else {
+                        test = raw | (1ull << original_index);
+                    }
+                    if (test == raw) {
+                        break;
+                    }
+                    if (data.compare_exchange_weak(raw, test, order)) {
+                        return original_index;
+                    }
+                }
             } else {
-                rotated |= 1ull << counted;
+                return original_index;
             }
         }
 
-        return std::numeric_limits<size_t>::max();
+        return std::numeric_limits<std::size_t>::max();
     }
 
 public:
