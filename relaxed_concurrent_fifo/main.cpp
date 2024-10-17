@@ -144,27 +144,24 @@ void test_continuous_bitset_claim() {
 }
 
 template <typename BENCHMARK>
-void run_benchmark(const std::string& test_name, const std::vector<std::unique_ptr<benchmark_provider<BENCHMARK>>>& instances, const std::vector<double>& prefill_amounts,
+void run_benchmark(const std::string& test_name, const std::vector<std::unique_ptr<benchmark_provider<BENCHMARK>>>& instances, double prefill,
 	const std::vector<size_t>& processor_counts, int test_iterations, int test_time_seconds) {
 	constexpr const char* format = "fifo-{}-{}-{:%FT%H-%M-%S}.csv";
 
 	if (BENCHMARK::use_timing) {
-		std::cout << "Expected running time: " << prefill_amounts.size() * test_iterations * test_time_seconds * processor_counts.size() * instances.size() << " seconds" << std::endl;
+		std::cout << "Expected running time: " << test_iterations * test_time_seconds * processor_counts.size() * instances.size() << " seconds" << std::endl;
 	}
 
+	std::ofstream file{ std::format(format, test_name, prefill, std::chrono::round<std::chrono::seconds>(std::chrono::file_clock::now())) };
 	for (auto i : std::views::iota(0, test_iterations)) {
 		std::cout << "Test run " << (i + 1) << " of " << test_iterations << std::endl;
-		for (auto prefill : prefill_amounts) {
-			std::cout << "Prefilling with " << prefill << std::endl;
-			std::ofstream file{ std::format(format, test_name, prefill, std::chrono::round<std::chrono::seconds>(std::chrono::file_clock::now())) };
-			for (const auto& imp : instances) {
-				std::cout << "Testing " << imp->get_name() << std::endl;
-				for (auto i : processor_counts) {
-					std::cout << "With " << i << " processors" << std::endl;
-					file << imp->get_name() << "," << i << ',';
-					imp->test(i, test_time_seconds, prefill).output(file);
-					file << '\n';
-				}
+		for (const auto& imp : instances) {
+			std::cout << "Testing " << imp->get_name() << std::endl;
+			for (auto i : processor_counts) {
+				std::cout << "With " << i << " processors" << std::endl;
+				file << imp->get_name() << "," << i << ',';
+				imp->test(i, test_time_seconds, prefill).output(file);
+				file << '\n';
 			}
 		}
 	}
