@@ -12,7 +12,9 @@ private:
 	std::atomic_int curr_thread_id = 0;
 
 public:
-	scal_wrapper(size_t thread_count, size_t size) : queue{thread_count * K, size / K / thread_count} { }
+	scal_wrapper(size_t thread_count, size_t size) : queue{thread_count * K, size / K / thread_count} {
+		std::cout << size << "  " << thread_count * K << "  " << size / K / thread_count << std::endl;
+	}
 
 	struct handle {
 	private:

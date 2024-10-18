@@ -18,6 +18,7 @@ template <typename T>
 using LCRQWrapped = LCRQueue<T>;
 
 #include "contenders/scal/scal_wrapper.h"
+#include "contenders/scal/util/threadlocals.h"
 #pragma GCC diagnostic pop
 #endif // __GNUC__
 
@@ -220,10 +221,10 @@ void add_all_benchmarking(std::vector<std::unique_ptr<benchmark_provider<BENCHMA
 	instances.push_back(std::make_unique<benchmark_provider_relaxed<BENCHMARK, 4, 127>>("bbq-4-127"));
 	instances.push_back(std::make_unique<benchmark_provider_relaxed<BENCHMARK, 8, 127>>("bbq-8-127"));
 #ifdef __GNUC__
-	instances.push_back(std::make_unique<benchmark_provider_generic<scal_wrapper<uint64_t, 1024>, BENCHMARK>>("bs-kfifo"));
-	instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, LCRQWrapped>, BENCHMARK>>("lcrq"));
+	instances.push_back(std::make_unique<benchmark_provider_generic<scal_wrapper<uint64_t, 64>, BENCHMARK>>("bs-kfifo"));
+	//instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, LCRQWrapped>, BENCHMARK>>("lcrq"));
 #endif // __GNUC__
-	instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, MichaelScottQueue>, BENCHMARK>>("msq"));
+	//instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, MichaelScottQueue>, BENCHMARK>>("msq"));
 }
 
 int main() {
@@ -235,6 +236,8 @@ int main() {
 
 #ifdef __GNUC__
 	scal::ThreadLocalAllocator::Get().Init(1024 * 1024, true);
+	scal::ThreadContext::prepare(std::thread::hardware_concurrency() * 2);
+	scal::ThreadContext::assign_context();
 #endif // __GNUC__
 
 	std::vector<size_t> processor_counts;
