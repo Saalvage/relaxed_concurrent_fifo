@@ -21,7 +21,7 @@ with open(file) as file:
         if name not in impls:
             impls[name] = impl()
         x = int(row[1])
-        y = int(row[2])
+        y = float(row[2])
         if (x not in impls[name].values):
             impls[name].values[x] = [y]
         else:

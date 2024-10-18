@@ -18,7 +18,7 @@ if (CMAKE_VERSION VERSION_GREATER 3.12)
 endif()
 
 if(MSVC)
-  target_compile_options(relaxed_concurrent_fifo PRIVATE /W3 /WX)
+  target_compile_options(relaxed_concurrent_fifo PRIVATE /W3 /WX /bigobj)
 else()
   target_compile_options(relaxed_concurrent_fifo PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
