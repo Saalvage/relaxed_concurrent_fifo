@@ -4,7 +4,7 @@
 
 set(sources
   main.cpp
-)
+  thread_pool.cpp)
 
 if(NOT MSVC)
   set(sources ${sources} "contenders/scal/util/allocation.cc" "contenders/scal/util/random.cc" "contenders/scal/util/threadlocals.cc")
