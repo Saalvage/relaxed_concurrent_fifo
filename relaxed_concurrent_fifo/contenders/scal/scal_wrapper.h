@@ -13,7 +13,7 @@ private:
 
 public:
 	// TODO: We allow the queue here the same courtesy of at least 4 segments, not sure if that's correct or they should have more.
-	scal_wrapper(size_t thread_count, size_t size) : queue{thread_count * K, std::max(4, size / K / thread_count)} {
+	scal_wrapper(size_t thread_count, size_t size) : queue{thread_count * K, std::max<size_t>(4, size / K / thread_count)} {
 		std::cout << size << "  " << thread_count * K << "  " << size / K / thread_count << std::endl;
 	}
 
