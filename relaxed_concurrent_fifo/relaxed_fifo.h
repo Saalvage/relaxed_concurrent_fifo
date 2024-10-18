@@ -23,15 +23,16 @@ constexpr size_t CACHE_SIZE =
 template <typename T, size_t BLOCKS_PER_WINDOW_RAW = 8, size_t CELLS_PER_BLOCK = CACHE_SIZE / sizeof(T) - 1, typename BITSET_TYPE = uint8_t>
 class relaxed_fifo {
 private:
-	static constexpr size_t make_multiple(size_t val, size_t multiple_of) {
-		size_t ret = multiple_of;
-		while (ret < val) {
-			ret += multiple_of;
+	static constexpr size_t make_po2(size_t size) {
+		size_t ret = 1;
+		while (size > ret) {
+			ret *= 2;
 		}
 		return ret;
 	}
 
-	static constexpr size_t BLOCKS_PER_WINDOW = make_multiple(BLOCKS_PER_WINDOW_RAW, sizeof(BITSET_TYPE) * 8);
+	// PO2 for modulo performance and at least as big as the bitset type.
+	static constexpr size_t BLOCKS_PER_WINDOW = std::max(sizeof(BITSET_TYPE) * 8, make_po2(BLOCKS_PER_WINDOW_RAW));
 
 	const size_t window_count;
 	const size_t window_count_mod_mask;
@@ -68,14 +69,6 @@ private:
 
 	alignas(128) std::atomic_uint64_t read_window;
 	alignas(128) std::atomic_uint64_t write_window;
-
-	static constexpr size_t make_po2(size_t size) {
-		size_t ret = 1;
-		while (size > ret) {
-			ret *= 2;
-		}
-		return ret;
-	}
 
 public:
 	relaxed_fifo(size_t size) : window_count(std::max<size_t>(4, make_po2(size / BLOCKS_PER_WINDOW / CELLS_PER_BLOCK))), window_count_mod_mask(window_count - 1) {
