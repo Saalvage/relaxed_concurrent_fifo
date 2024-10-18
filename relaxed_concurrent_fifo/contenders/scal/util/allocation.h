@@ -132,7 +132,7 @@ void* ThreadLocalAllocator::Malloc(size_t size) {
   if ((current_ + static_cast<intptr_t>(size)) >= end_) {
     if (true) { // FLAGS_reuse_memory
       if (false) { // FLAGS_warn_on_overflow
-        fprintf(stderr, "%p: overflowing buffer. resetting.\n", this);
+        fprintf(stderr, "%p: overflowing buffer. resetting.\n", reinterpret_cast<void*>(this));
       }
     } else {
       fprintf(stderr, "warning: allocating new buffer\n");
