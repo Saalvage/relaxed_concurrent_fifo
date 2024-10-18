@@ -221,7 +221,10 @@ void add_all_benchmarking(std::vector<std::unique_ptr<benchmark_provider<BENCHMA
 	instances.push_back(std::make_unique<benchmark_provider_relaxed<BENCHMARK, 4, 127>>("bbq-4-127"));
 	instances.push_back(std::make_unique<benchmark_provider_relaxed<BENCHMARK, 8, 127>>("bbq-8-127"));
 #ifdef __GNUC__
-	instances.push_back(std::make_unique<benchmark_provider_generic<scal_wrapper<uint64_t, 64>, BENCHMARK>>("bs-kfifo"));
+	instances.push_back(std::make_unique<benchmark_provider_generic<scal_wrapper<uint64_t, 8>, BENCHMARK>>("bs-8-kfifo"));
+	instances.push_back(std::make_unique<benchmark_provider_generic<scal_wrapper<uint64_t, 128>, BENCHMARK>>("bs-128-kfifo"));
+	instances.push_back(std::make_unique<benchmark_provider_generic<scal_wrapper<uint64_t, 512>, BENCHMARK>>("bs-512-kfifo"));
+	instances.push_back(std::make_unique<benchmark_provider_generic<scal_wrapper<uint64_t, 1024>, BENCHMARK>>("bs-1024-kfifo"));
 	//instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, LCRQWrapped>, BENCHMARK>>("lcrq"));
 #endif // __GNUC__
 	//instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, MichaelScottQueue>, BENCHMARK>>("msq"));
