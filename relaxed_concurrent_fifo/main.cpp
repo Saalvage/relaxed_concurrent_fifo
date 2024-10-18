@@ -194,8 +194,7 @@ int main() {
 	//test_consistency<8, 16>(20000, 200000, 0);
 
 #ifdef __GNUC__
-	// 100 MB
-	scal::ThreadLocalAllocator::Get().Init(100 * 1024 * 1024, true);
+	scal::ThreadLocalAllocator::Get().Init(1024 * 1024, true);
 #endif // __GNUC__
 
 	scal::SegmentQueue<uint64_t> a{ 1024 };
