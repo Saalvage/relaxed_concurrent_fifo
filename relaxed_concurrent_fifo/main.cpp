@@ -220,10 +220,10 @@ void add_all_benchmarking(std::vector<std::unique_ptr<benchmark_provider<BENCHMA
 	instances.push_back(std::make_unique<benchmark_provider_relaxed<BENCHMARK, 4, 127>>("bbq-4-127"));
 	instances.push_back(std::make_unique<benchmark_provider_relaxed<BENCHMARK, 8, 127>>("bbq-8-127"));
 #ifdef __GNUC__
-	instances.push_back(std::make_unique<benchmark_provider_generic<scal_wrapper<uint64_t, 1024>, benchmark_default>>("bs-kfifo"));
-	instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, LCRQWrapped>, benchmark_default>>("lcrq"));
+	instances.push_back(std::make_unique<benchmark_provider_generic<scal_wrapper<uint64_t, 1024>, BENCHMARK>>("bs-kfifo"));
+	instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, LCRQWrapped>, BENCHMARK>>("lcrq"));
 #endif // __GNUC__
-	instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, MichaelScottQueue>, benchmark_default>>("msq"));	
+	instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, MichaelScottQueue>, BENCHMARK>>("msq"));
 }
 
 int main() {
@@ -236,11 +236,6 @@ int main() {
 #ifdef __GNUC__
 	scal::ThreadLocalAllocator::Get().Init(1024 * 1024, true);
 #endif // __GNUC__
-
-	scal::SegmentQueue<uint64_t> a{ 1024 };
-	a.enqueue(2);
-	//uint64_t x;
-	//a.dequeue(&x);
 
 	std::vector<size_t> processor_counts;
 	for (size_t i = 1; i <= std::thread::hardware_concurrency(); i *= 2) {
@@ -267,33 +262,33 @@ int main() {
 	case 1: {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
 		add_all_benchmarking(instances);
-		run_benchmark("comp", instances, {0.5}, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
+		run_benchmark("comp", instances, 0.5, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
 		} break;
 	case 2: {
 		std::cout << "Benchmarking performance" << std::endl;
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
 		add_all_parameter_tuning(instances);
-		run_benchmark("pt-block", instances, {0.5}, { processor_counts.back() }, TEST_ITERATIONS, TEST_TIME_SECONDS);
+		run_benchmark("pt-block", instances, 0.5, { processor_counts.back() }, TEST_ITERATIONS, TEST_TIME_SECONDS);
 
 		std::cout << "Benchmarking quality" << std::endl;
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_quality>>> instances_q;
 		add_all_parameter_tuning(instances_q);
-		run_benchmark("pt-quality", instances_q, {0.5}, { processor_counts.back() }, TEST_ITERATIONS, 0);
+		run_benchmark("pt-quality", instances_q, 0.5, { processor_counts.back() }, TEST_ITERATIONS, 0);
 		} break;
 	case 3: {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_quality>>> instances;
 		add_all_benchmarking(instances);
-		run_benchmark("quality", instances, {0.5}, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
+		run_benchmark("quality", instances, 0.5, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
 		} break;
 	case 4: {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_fill>>> instances;
 		add_all_benchmarking(instances);
-		run_benchmark("fill", instances, {0}, processor_counts, TEST_ITERATIONS, 0);
+		run_benchmark("fill", instances, 0, processor_counts, TEST_ITERATIONS, 0);
 		} break;
 	case 5: {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_empty>>> instances;
 		add_all_benchmarking(instances);
-		run_benchmark("empty", instances, {1}, processor_counts, TEST_ITERATIONS, 0);
+		run_benchmark("empty", instances, 1, processor_counts, TEST_ITERATIONS, 0);
 		} break;
 	case 6: {
 		static constexpr size_t THREADS = 128;
@@ -304,7 +299,7 @@ int main() {
 		instances.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 2 * THREADS, 63>, benchmark_default>>("bbq-2-63"));
 		instances.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 4 * THREADS, 127>, benchmark_default>>("bbq-4-127"));
 		instances.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 8 * THREADS, 127>, benchmark_default>>("bbq-8-127"));
-		run_benchmark("ss-performance", instances, {0.5}, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
+		run_benchmark("ss-performance", instances, 0.5, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
 
 		std::cout << "Benchmarking quality" << std::endl;
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_quality>>> instances_q;
@@ -312,7 +307,7 @@ int main() {
 		instances_q.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 2 * THREADS, 63>, benchmark_quality>>("bbq-2-63"));
 		instances_q.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 4 * THREADS, 127>, benchmark_quality>>("bbq-4-127"));
 		instances_q.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 8 * THREADS, 127>, benchmark_quality>>("bbq-8-127"));
-		run_benchmark("ss-quality", instances_q, {0.5}, processor_counts, TEST_ITERATIONS, 0);
+		run_benchmark("ss-quality", instances_q, 0.5, processor_counts, TEST_ITERATIONS, 0);
 		} break;
 	case 7: {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
@@ -332,12 +327,12 @@ int main() {
 		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 2, 63, uint64_t>>("64-bit-bbq-2-63"));
 		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 4, 127, uint64_t>>("64-bit-bbq-4-127"));
 		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 8, 127, uint64_t>>("64-bit-bbq-8-127"));
-		run_benchmark("bitset-sizes", instances, {0.5}, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
+		run_benchmark("bitset-sizes", instances, 0.5, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
 		} break;
 	case 8: {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
 		add_all_benchmarking(instances);
-		run_benchmark("comp", instances, {0}, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
+		run_benchmark("comp", instances, 0, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
 		} break;
 	}
 
