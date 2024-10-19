@@ -6,6 +6,7 @@
 #include <atomic>
 #include <random>
 #include <new>
+#include <optional>
 
 #include "atomic_bitset.h"
 
@@ -45,10 +46,17 @@ private:
 	static_assert(sizeof(std::atomic<T>) == 8);
 
 	struct alignas(8) header_t {
-		// 16 bits epoch, 16 bits read begin index, 16 bits read end index, 16 bits write index
+		// 16 bits epoch, 16 bits read started index, 16 bits read finished index, 16 bits write index
 		std::atomic_uint64_t epoch_and_indices;
 	};
 	static_assert(sizeof(header_t) == 8);
+
+	// We use 64 bit return types here to avoid potential deficits through 16-bit comparisons.
+	static constexpr uint64_t get_epoch(uint64_t ei) { return ei >> 48; }
+	static constexpr uint64_t get_read_started_index(uint64_t ei) { return (ei >> 32) & 0xffff; }
+	static constexpr uint64_t get_read_finished_index(uint64_t ei) { return (ei >> 16) & 0xffff; }
+	static constexpr uint64_t get_write_index(uint64_t ei) { return ei & 0xffff; }
+	static constexpr uint64_t epoch_to_header(uint64_t epoch) { return epoch << 48; }
 
 	struct block_t {
 		header_t header;
@@ -106,8 +114,7 @@ public:
 	private:
 		relaxed_fifo& fifo;
 
-		// Doing it like this allows the push code to grab a new block instead of requiring special cases for first-time initialization.
-		// An already active block will always trigger a check.
+		// Doing it like this avoids having to have a special case for first-time initialization, while only claiming a block on first use.
 		static inline thread_local block_t dummy_block{header_t{0xffffull << 48}, {}};
 	
 		block_t* read_block = &dummy_block;
@@ -165,11 +172,11 @@ public:
 						// We need to make sure we clean those up BEFORE we move the write window in order to prevent
 						// the read window from being moved before all blocks have either been claimed or invalidated.
 						window_t& new_window = fifo.get_window(write_window);
-						uint64_t next_epoch = (write_window + fifo.window_count) << 48;
+						uint64_t next_epoch = epoch_to_header(write_window + fifo.window_count);
 						for (size_t i = 0; i < BLOCKS_PER_WINDOW; i++) {
 							// We can't rely on the bitset here because it might be experiencing a spurious claim.
 
-							uint64_t ei = write_window << 48; // All empty with current epoch.
+							uint64_t ei = epoch_to_header(write_window); // All empty with current epoch.
 							new_window.blocks[i].header.epoch_and_indices.compare_exchange_strong(ei, next_epoch, std::memory_order_relaxed);
 						}
 						fifo.write_window.compare_exchange_strong(write_window, write_window + 1, std::memory_order_relaxed);
@@ -198,12 +205,13 @@ public:
 
 			header_t* header = &write_block->header;
 			uint64_t ei = header->epoch_and_indices.load(std::memory_order_relaxed);
-			uint16_t index;
+			uint64_t index;
 			bool claimed = false;
-			while (ei >> 48 != (write_window & 0xffff) || (index = (ei & 0xffff)) >= CELLS_PER_BLOCK || !header->epoch_and_indices.compare_exchange_weak(ei, ei + 1, std::memory_order_relaxed)) {
+			while (get_epoch(ei) != (write_window & 0xffff) || (index = get_write_index(ei)) == CELLS_PER_BLOCK || !header->epoch_and_indices.compare_exchange_weak(ei, ei + 1, std::memory_order_relaxed)) {
 				// We need this in case of a spurious claim where we claim a bit, but can't place an element inside,
 				// because the write window was already forced-moved.
-				if (claimed && (index = (ei & 0xffff)) == 0) {
+				// This is safe to do because writers are exclusive.
+				if (claimed && (index = get_write_index(ei)) == 0) {
 					// We're abandoning an empty block!
 					window_t& window = fifo.get_window(write_window);
 					auto diff = write_block - window.blocks;
@@ -225,9 +233,9 @@ public:
 		std::optional<T> pop() {
 			header_t* header = &read_block->header;
 			uint64_t ei = header->epoch_and_indices.load(std::memory_order_relaxed);
-			uint16_t index;
+			uint64_t index;
 
-			while (ei >> 48 != (read_window & 0xffff) || (index = ((ei >> 32) & 0xffff)) >= (ei & 0xffff)
+			while (get_epoch(ei) != (read_window & 0xffff) || (index = get_read_started_index(ei)) == get_write_index(ei)
 				|| !header->epoch_and_indices.compare_exchange_weak(ei, ei + (1ull << 32), std::memory_order_relaxed)) {
 				if (!claim_new_block_read()) {
 					return std::nullopt;
@@ -240,10 +248,12 @@ public:
 			while ((ret = std::move(read_block->cells[index].load(std::memory_order_relaxed))) == 0) { }
 			read_block->cells[index].store(0, std::memory_order_relaxed);
 
-			uint16_t finished_index = static_cast<uint16_t>(header->epoch_and_indices.fetch_add(1 << 16, std::memory_order_relaxed) >> 16) + 1;
-			if (finished_index >= (ei & 0xffff)) {
+			uint64_t finished_index = get_read_finished_index(header->epoch_and_indices.fetch_add(1ull << 16, std::memory_order_relaxed)) + 1;
+			// We need the >= here because between the read of ei and the fetch_add above both a write and a finished read might have occurred
+			// that make our finished_index > our (outdated) write index.
+			if (finished_index >= get_write_index(ei)) {
 				// Apply local read index update.
-				ei = (ei & (0xffffull << 48)) | (static_cast<uint64_t>(finished_index) << 32) | (static_cast<uint64_t>(finished_index) << 16) | finished_index;
+				ei = (ei & (0xffffull << 48)) | (finished_index << 32) | (finished_index << 16) | finished_index;
 				// Before we mark this block as empty, we make it unavailable for other readers and writers of this epoch.
 				if (header->epoch_and_indices.compare_exchange_strong(ei, (read_window + fifo.window_count) << 48, std::memory_order_relaxed)) {
 					window_t& window = fifo.get_window(read_window);

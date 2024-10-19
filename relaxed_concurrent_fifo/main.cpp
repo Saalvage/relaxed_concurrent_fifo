@@ -85,7 +85,7 @@ void test_all() {
 
 template <size_t THREAD_COUNT, size_t BLOCK_MULTIPLIER>
 void test_consistency(size_t fifo_size, size_t elements_per_thread, double prefill) {
-	relaxed_fifo<uint64_t, THREAD_COUNT * BLOCK_MULTIPLIER> fifo{ fifo_size };
+	relaxed_fifo<uint64_t, THREAD_COUNT * BLOCK_MULTIPLIER> fifo{ THREAD_COUNT, fifo_size };
 	auto handle = fifo.get_handle();
 
 	size_t pre_push = static_cast<size_t>(fifo_size * prefill);
