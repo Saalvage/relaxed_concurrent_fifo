@@ -39,9 +39,8 @@ struct benchmark_default : benchmark_base {
 	benchmark_default(const benchmark_info& info) : results(info.num_threads), test_time_seconds(info.test_time_seconds) { }
 
 	template <typename T>
-	void per_thread(size_t thread_index, T& fifo, std::barrier<>& a, std::atomic_bool& over) {
+	void per_thread(size_t thread_index, typename T::handle& handle, std::barrier<>& a, std::atomic_bool& over) {
 		size_t its = 0;
-		auto handle = fifo.get_handle();
 		a.arrive_and_wait();
 		while (!over) {
 			handle.push(5);
@@ -110,8 +109,7 @@ public:
 	}
 
 	template <typename T>
-	void per_thread(size_t thread_index, T& fifo, std::barrier<>& a, [[maybe_unused]] std::atomic_bool& over) {
-		auto handle = fifo.get_handle();
+	void per_thread(size_t thread_index, typename T::handle& handle, std::barrier<>& a, [[maybe_unused]] std::atomic_bool& over) {
 		a.arrive_and_wait();
 		do {
 			for (size_t i = 0; i < CHUNK_SIZE; i++) {
@@ -183,8 +181,7 @@ struct benchmark_fill {
 	benchmark_fill(const benchmark_info& info) : results(info.num_threads) { }
 
 	template <typename T>
-	void per_thread(size_t thread_index, T& fifo, std::barrier<>& a, std::atomic_bool&) {
-		auto handle = fifo.get_handle();
+	void per_thread(size_t thread_index, typename T::handle& handle, std::barrier<>& a, std::atomic_bool&) {
 		a.arrive_and_wait();
 		while (handle.push(thread_index + 1)) {
 			results[thread_index]++;
@@ -199,8 +196,7 @@ struct benchmark_fill {
 
 struct benchmark_empty : benchmark_fill {
 	template <typename T>
-	void per_thread(size_t thread_index, T& fifo, std::barrier<>& a, std::atomic_bool&) {
-		auto handle = fifo.get_handle();
+	void per_thread(size_t thread_index, typename T::handle& handle, std::barrier<>& a, std::atomic_bool&) {
 		a.arrive_and_wait();
 		while (handle.pop().has_value()) {
 			results[thread_index]++;
@@ -219,19 +215,36 @@ protected:
 	template <fifo FIFO>
 	static BENCHMARK test_single(thread_pool& pool, size_t num_threads, size_t test_time_seconds, double prefill_amount) {
 		FIFO fifo{num_threads, BENCHMARK::size};
+		std::vector<typename FIFO::handle> handles;
+		handles.reserve(num_threads);
+		std::atomic_size_t s = 0;
+		std::condition_variable cv;
+		std::mutex m;
 		// We prefill with all threads since this may improve performance for certain implementations.
-		pool.do_work([&](size_t, std::barrier<>& a) {
+		pool.do_work([&](size_t idx, std::barrier<>& a) {
+			// We want to execute these in order so that the indices in the array are correct
+			// while still having been initialized by the correct thread.
+			// We cannot rely on the default constructability of handles.
+			std::unique_lock lock{m};
+			cv.wait(lock, [&] { return s == idx; });
+			handles.push_back(fifo.get_handle());
+			++s;
+			lock.unlock();
+			cv.notify_all();
 			a.arrive_and_wait();
-			auto handle = fifo.get_handle();
 			for (size_t i = 0; i < prefill_amount * BENCHMARK::size / num_threads; i++) {
-				handle.push(i + 1);
+				handles[idx].push(i + 1);
 			}
 		}, num_threads, true);
 		std::atomic_bool over = false;
 		BENCHMARK b{benchmark_info{num_threads, test_time_seconds}};
 
 		auto joined = std::async([&] {
-			pool.do_work([&](size_t i, std::barrier<>& a) { b.template per_thread<FIFO>(i, fifo, a, over); }, num_threads);
+			pool.do_work([&](size_t i, std::barrier<>& a) {
+				// Make sure handle is on the stack.
+				typename FIFO::handle handle = std::move(handles[i]);
+				b.template per_thread<FIFO>(i, handle, a, over);
+			}, num_threads);
 		});
 		// We signal, then start taking the time because some threads might not have arrived at the signal.
 		pool.signal_and_wait();
