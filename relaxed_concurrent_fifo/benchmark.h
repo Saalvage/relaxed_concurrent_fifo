@@ -116,7 +116,7 @@ public:
 	}
 
 	template <typename T>
-	void per_thread(size_t thread_index, typename T::handle& handle, std::barrier<>& a, [[maybe_unused]] std::atomic_bool& over) {
+	void per_thread(size_t thread_index, typename T::handle& handle, std::barrier<>& a) {
 		a.arrive_and_wait();
 		do {
 			for (size_t i = 0; i < CHUNK_SIZE; i++) {
@@ -130,7 +130,7 @@ public:
 
 	template <typename T>
 	void output(T& stream) {
-		auto total_count = std::accumulate(results.begin(), results.end(), (size_t)0, [](size_t size, const auto& v) { return size + v.size(); });
+		auto total_count = std::accumulate(results.begin(), results.end(), static_cast<size_t>(0), [](size_t size, const auto& v) { return size + v.size(); });
 		std::vector<pop_op> pops;
 		pops.reserve(total_count);
 		std::vector<uint64_t> pushes;
@@ -183,7 +183,7 @@ struct benchmark_fill : benchmark_timed<false, 1 << 28> {
 	benchmark_fill(const benchmark_info& info) : results(info.num_threads) { }
 
 	template <typename T>
-	void per_thread(size_t thread_index, typename T::handle& handle, std::barrier<>& a, std::atomic_bool&) {
+	void per_thread(size_t thread_index, typename T::handle& handle, std::barrier<>& a) {
 		a.arrive_and_wait();
 		while (handle.push(thread_index + 1)) {
 			results[thread_index]++;
@@ -198,7 +198,7 @@ struct benchmark_fill : benchmark_timed<false, 1 << 28> {
 
 struct benchmark_empty : benchmark_fill {
 	template <typename T>
-	void per_thread(size_t thread_index, typename T::handle& handle, std::barrier<>& a, std::atomic_bool&) {
+	void per_thread(size_t thread_index, typename T::handle& handle, std::barrier<>& a) {
 		a.arrive_and_wait();
 		while (handle.pop().has_value()) {
 			results[thread_index]++;
@@ -250,7 +250,11 @@ protected:
 		auto joined = std::async(&thread_pool::do_work, &pool, [&](size_t i, std::barrier<>& a) {
 			// Make sure handle is on the stack.
 			typename FIFO::handle handle = std::move(handles[i]);
-			b.template per_thread<FIFO>(i, handle, a, over);
+			if constexpr (BENCHMARK::HAS_TIMEOUT) {
+				b.template per_thread<FIFO>(i, handle, a, over);
+			} else {
+				b.template per_thread<FIFO>(i, handle, a);
+			}
 		}, num_threads, false);
 		// We signal, then start taking the time because some threads might not have arrived at the signal.
 		pool.signal_and_wait();
