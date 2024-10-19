@@ -32,7 +32,8 @@ if len(list(impls.values())[0].values) > 1:
         values = v.values.values()
         avgs = list(map(statistics.mean, values))
         std = list(map(statistics.stdev, values)) if len(first(values)) > 1 else 0
-        plt.errorbar(v.values.keys(), avgs, yerr=std, label=k, fmt="-o", capsize=3, ecolor="black")
+        xs, ys, std = zip(*sorted(zip(v.values.keys(), avgs, std)))
+        plt.errorbar(xs, ys, yerr=std, label=k, fmt="-o", capsize=3, ecolor="black")
         plt.xlabel("Processors")
         plt.title("FIFO-Queue Comparison")
 else:
