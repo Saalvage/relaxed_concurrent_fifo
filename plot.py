@@ -27,22 +27,17 @@ with open(file) as file:
         else:
             impls[name].values[x].append(y)
 
-if len(list(impls.values())[0].values) > 1:
-    for k, v in impls.items():
-        values = v.values.values()
-        avgs = list(map(statistics.mean, values))
-        std = list(map(statistics.stdev, values)) if len(first(values)) > 1 else 0
-        xs, ys, std = zip(*sorted(zip(v.values.keys(), avgs, std)))
-        plt.errorbar(xs, ys, yerr=std, label=k, fmt="-o", capsize=3, ecolor="black")
-        plt.xlabel("Processors")
-        plt.title("FIFO-Queue Comparison")
-else:
-    values = list(impls.values())
-    avgs = list(map(lambda l: statistics.mean(first(l.values.values())), values))
-    std = list(map(lambda l: 0, values))
-    plt.errorbar(list(map(int, impls.keys())), avgs, yerr=std, label=list(values[0].values.keys())[0], fmt="-o", capsize=3, ecolor="black")
-    plt.xlabel("Blocks per window per thread")
-    plt.title("Relaxed-FIFO Window Size Comparison")
+for k, v in impls.items():
+    values = v.values.values()
+    avgs = list(map(statistics.mean, values))
+    std = list(map(statistics.stdev, values)) if len(first(values)) > 1 else [0] * len(first(values))
+    print(v.values.keys())
+    print(avgs)
+    print(std)
+    xs, ys, std = zip(*sorted(zip(v.values.keys(), avgs, std)))
+    plt.errorbar(xs, ys, yerr=std, label=k, fmt="-o", capsize=3, ecolor="black")
+    plt.xlabel("Processors")
+    plt.title("FIFO-Queue Comparison")
 
 plt.xscale("log", base = 2)
 plt.ylabel("Iterations")
