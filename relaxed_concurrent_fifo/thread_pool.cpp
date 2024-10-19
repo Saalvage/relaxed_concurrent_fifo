@@ -8,7 +8,7 @@
 #include <pthread.h>
 #endif // _POSIX_VERSION
 
-thread_pool::thread_pool(bool do_signaling) : do_signaling(do_signaling), sems(std::thread::hardware_concurrency()), barrier(std::thread::hardware_concurrency() + (do_signaling ? 1 : 2)) {
+thread_pool::thread_pool() : sems(std::thread::hardware_concurrency()), barrier(std::thread::hardware_concurrency() + 2) {
 	auto thread_count = std::thread::hardware_concurrency();
 	threads.reserve(thread_count);
 	auto lambda = [this](std::stop_token token, size_t i) {
@@ -48,7 +48,8 @@ thread_pool::~thread_pool() {
 /// </summary>
 /// <param name="func">Must arrive at the barrier.</param>
 /// <param name="thread_count"></param>
-void thread_pool::do_work(std::function<void(size_t, std::barrier<>&)> func, size_t thread_count) {
+/// <param name="do_signaling">Whether the caller wants to manually signal the start of the execution.</param>
+void thread_pool::do_work(std::function<void(size_t, std::barrier<>&)> func, size_t thread_count, bool do_signaling) {
 	assert(thread_count <= threads.size());
 
 	per_thread = std::move(func);
@@ -59,20 +60,20 @@ void thread_pool::do_work(std::function<void(size_t, std::barrier<>&)> func, siz
 		std::ignore = barrier.arrive(threads.size() - thread_count);
 	}
 
+	if (do_signaling) {
+		std::ignore = barrier.arrive();
+	}
 	barrier.arrive_and_wait();
 
 	// Wait until all threads have concluded.
 	if (thread_count < threads.size()) {
 		std::ignore = barrier.arrive(threads.size() - thread_count);
 	}
-	if (!do_signaling) {
-		std::ignore = barrier.arrive();
-	}
+	std::ignore = barrier.arrive();
 	barrier.arrive_and_wait();
 }
 
 void thread_pool::signal_and_wait() {
-	assert(!do_signaling);
 	barrier.arrive_and_wait();
 }
 

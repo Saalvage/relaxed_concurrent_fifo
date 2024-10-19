@@ -50,7 +50,6 @@ public:
 template <typename T>
 struct rts_queue : scal_wrapper_base<T, RTSQueue> {
 public:
-	// TODO: We allow the queue here the same courtesy of at least 4 segments, not sure if that's correct or they should have more.
 	rts_queue(size_t thread_count, [[maybe_unused]] size_t size) {
 		scal_wrapper_base<T, RTSQueue>::queue.initialize(thread_count);
 	}

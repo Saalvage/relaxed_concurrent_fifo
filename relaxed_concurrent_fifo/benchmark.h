@@ -219,10 +219,14 @@ protected:
 	template <fifo FIFO>
 	static BENCHMARK test_single(thread_pool& pool, size_t num_threads, size_t test_time_seconds, double prefill_amount) {
 		FIFO fifo{num_threads, BENCHMARK::size};
-		auto handle = fifo.get_handle();
-		for (size_t i = 0; i < prefill_amount * BENCHMARK::size; i++) {
-			handle.push(i + 1);
-		}
+		// We prefill with all threads since this may improve performance for certain implementations.
+		pool.do_work([&](size_t, std::barrier<>& a) {
+			a.arrive_and_wait();
+			auto handle = fifo.get_handle();
+			for (size_t i = 0; i < prefill_amount * BENCHMARK::size / num_threads; i++) {
+				handle.push(i + 1);
+			}
+		}, num_threads, true);
 		std::atomic_bool over = false;
 		BENCHMARK b{benchmark_info{num_threads, test_time_seconds}};
 

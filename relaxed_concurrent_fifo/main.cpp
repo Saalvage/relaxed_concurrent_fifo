@@ -241,12 +241,16 @@ int main() {
 	//test_consistency<8, 16>(20000, 200000, 0);
 
 	// We need this because scal does really weird stuff to have thread locals.
-	thread_pool pool{ false };
+	thread_pool pool;
 
 #ifdef __GNUC__
-	scal::ThreadLocalAllocator::Get().Init(1024 * 1024, true);
 	scal::ThreadContext::prepare(std::thread::hardware_concurrency() * 2);
-	scal::ThreadContext::assign_context();
+	scal::ThreadLocalAllocator::Get().Init(1024, true);
+
+	pool.do_work([&](size_t, std::barrier<>& a) {
+		a.arrive_and_wait();
+		scal::ThreadLocalAllocator::Get().Init(1024, true);
+	}, std::thread::hardware_concurrency(), true);
 #endif // __GNUC__
 
 	std::vector<size_t> processor_counts;
