@@ -215,6 +215,7 @@ protected:
 	template <fifo FIFO>
 	static BENCHMARK test_single(thread_pool& pool, size_t num_threads, size_t test_time_seconds, double prefill_amount) {
 		FIFO fifo{num_threads, BENCHMARK::size};
+
 		std::vector<typename FIFO::handle> handles;
 		handles.reserve(num_threads);
 		std::atomic_size_t s = 0;
@@ -236,6 +237,7 @@ protected:
 				handles[idx].push(i + 1);
 			}
 		}, num_threads, true);
+
 		std::atomic_bool over = false;
 		BENCHMARK b{benchmark_info{num_threads, test_time_seconds}};
 

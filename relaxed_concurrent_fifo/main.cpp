@@ -169,7 +169,24 @@ void run_benchmark(thread_pool& pool, const std::string& test_name, const std::v
 	constexpr const char* format = "fifo-{}-{}-{:%FT%H-%M-%S}.csv";
 
 	if (BENCHMARK::use_timing) {
-		std::cout << "Expected running time: " << test_iterations * test_time_seconds * processor_counts.size() * instances.size() << " seconds" << std::endl;
+		std::cout << "Expected running time: ";
+		auto running_time_seconds = test_iterations * test_time_seconds * processor_counts.size() * instances.size();
+		if (running_time_seconds >= 60) {
+			auto running_time_minutes = running_time_seconds / 60;
+			running_time_seconds %= 60;
+			if (running_time_minutes >= 60) {
+				auto running_time_hours = running_time_minutes / 60;
+				running_time_minutes %= 60;
+				if (running_time_hours >= 24) {
+					auto running_time_days = running_time_hours / 24;
+					running_time_hours %= 24;
+					std::cout << running_time_days << " days, ";
+				}
+				std::cout << running_time_hours << " hours, ";
+			}
+			std::cout << running_time_minutes << " minutes, ";
+		}
+		std::cout << running_time_seconds << " seconds" << std::endl;
 	}
 
 	std::ofstream file{ std::format(format, test_name, prefill, std::chrono::round<std::chrono::seconds>(std::chrono::file_clock::now())) };
