@@ -27,6 +27,7 @@ struct benchmark_info {
 
 struct benchmark_base {
 	static constexpr bool use_timing = true;
+	static constexpr bool need_ordered_data = false;
 
 	// Make sure we have enough space for at least 4 (not 3 so it's PO2) windows where each window supports HW threads with HW blocks each with HW cells each.
 	static inline size_t size = 4 * std::thread::hardware_concurrency() * std::thread::hardware_concurrency() * std::thread::hardware_concurrency();
@@ -88,6 +89,7 @@ private:
 
 public:
 	static constexpr bool use_timing = false;
+	static constexpr bool need_ordered_data = true;
 
 	static constexpr size_t CHUNK_SIZE  = 5'000;
 	static constexpr size_t CHUNK_COUNT = 1'000;
@@ -233,7 +235,11 @@ protected:
 			lock.unlock();
 			cv.notify_all();
 			a.arrive_and_wait();
-			for (size_t i = 0; i < prefill_amount * BENCHMARK::size / num_threads; i++) {
+			// If need_ordered_data is set we sequentially fill the queue.
+			if (BENCHMARK::need_ordered_data && idx != 0) {
+				return;
+			}
+			for (size_t i = 0; i < prefill_amount * BENCHMARK::size / (BENCHMARK::need_ordered_data ? 1 : num_threads); i++) {
 				handles[idx].push(i + 1);
 			}
 		}, num_threads, true);
