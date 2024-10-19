@@ -168,7 +168,7 @@ void run_benchmark(thread_pool& pool, const std::string& test_name, const std::v
 	const std::vector<size_t>& processor_counts, int test_iterations, int test_time_seconds) {
 	constexpr const char* format = "fifo-{}-{}-{:%FT%H-%M-%S}.csv";
 
-	if (BENCHMARK::use_timing) {
+	if (BENCHMARK::HAS_TIMEOUT) {
 		std::cout << "Expected running time: ";
 		auto running_time_seconds = test_iterations * test_time_seconds * processor_counts.size() * instances.size();
 		if (running_time_seconds >= 60) {

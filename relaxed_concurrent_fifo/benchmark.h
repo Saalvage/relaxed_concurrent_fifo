@@ -10,7 +10,6 @@
 #include <atomic>
 #include <chrono>
 #include <numeric>
-#include <ranges>
 #include <future>
 #include <iostream>
 #include <execution>
@@ -20,20 +19,31 @@
 #include "thread_pool.h"
 #include "relaxed_fifo.h"
 
+// There are two components to a benchmark:
+// The benchmark itself which dictates what each thread does and what exactly is being measured;
+// and the benchmark provider, which effectively provides a concrete queue implementation to the benchmark.
+
 struct benchmark_info {
 	size_t num_threads;
 	size_t test_time_seconds;
 };
 
+template <bool HAS_TIMEOUT_T = true, bool RECORD_TIME_T = false, bool PREFILL_IN_ORDER_T = false, size_t SIZE_T = 0>
 struct benchmark_base {
-	static constexpr bool use_timing = true;
-	static constexpr bool need_ordered_data = false;
+	static constexpr bool HAS_TIMEOUT = HAS_TIMEOUT_T;
+	static constexpr bool RECORD_TIME = RECORD_TIME_T;
+	static constexpr bool PREFILL_IN_ORDER = PREFILL_IN_ORDER_T;
 
 	// Make sure we have enough space for at least 4 (not 3 so it's PO2) windows where each window supports HW threads with HW blocks each with HW cells each.
-	static inline size_t size = 4 * std::thread::hardware_concurrency() * std::thread::hardware_concurrency() * std::thread::hardware_concurrency();
+	static const inline size_t SIZE = SIZE_T != 0 ? SIZE_T : 4 * std::thread::hardware_concurrency() * std::thread::hardware_concurrency() * std::thread::hardware_concurrency();
 };
 
-struct benchmark_default : benchmark_base {
+template <bool PREFILL_IN_ORDER = false, size_t SIZE = 0>
+struct benchmark_timed : benchmark_base<false, true, PREFILL_IN_ORDER, SIZE> {
+	uint64_t time_nanos;
+};
+
+struct benchmark_default : benchmark_base<> {
 	std::vector<size_t> results;
 	size_t test_time_seconds;
 
@@ -57,7 +67,7 @@ struct benchmark_default : benchmark_base {
 	}
 };
 
-struct benchmark_quality : benchmark_base {
+struct benchmark_quality : benchmark_base<false, false, true> {
 private:
 	std::atomic_uint64_t chunks_done = 0;
 
@@ -88,13 +98,8 @@ private:
 	}
 
 public:
-	static constexpr bool use_timing = false;
-	static constexpr bool need_ordered_data = true;
-
 	static constexpr size_t CHUNK_SIZE  = 5'000;
 	static constexpr size_t CHUNK_COUNT = 1'000;
-
-	uint64_t time_nanos; // Ignored.
 
 	benchmark_quality(const benchmark_info& info) : results(info.num_threads) {
 		// Double the amount of "expected" load for this thread.
@@ -172,13 +177,8 @@ public:
 	}
 };
 
-struct benchmark_fill {
-	static constexpr bool use_timing = false;
-
-	static constexpr size_t size = 1 << 28;
-
+struct benchmark_fill : benchmark_timed<false, 1 << 28> {
 	std::vector<uint64_t> results;
-	uint64_t time_nanos;
 
 	benchmark_fill(const benchmark_info& info) : results(info.num_threads) { }
 
@@ -192,7 +192,7 @@ struct benchmark_fill {
 
 	template <typename T>
 	void output(T& stream) {
-		stream << (double)std::reduce(results.begin(), results.end()) / size << ',' << time_nanos;
+		stream << static_cast<double>(std::reduce(results.begin(), results.end())) / SIZE << ',' << time_nanos;
 	}
 };
 
@@ -216,7 +216,7 @@ public:
 protected:
 	template <fifo FIFO>
 	static BENCHMARK test_single(thread_pool& pool, size_t num_threads, size_t test_time_seconds, double prefill_amount) {
-		FIFO fifo{num_threads, BENCHMARK::size};
+		FIFO fifo{num_threads, BENCHMARK::SIZE};
 
 		std::vector<typename FIFO::handle> handles;
 		handles.reserve(num_threads);
@@ -235,11 +235,11 @@ protected:
 			lock.unlock();
 			cv.notify_all();
 			a.arrive_and_wait();
-			// If need_ordered_data is set we sequentially fill the queue.
-			if (BENCHMARK::need_ordered_data && idx != 0) {
+			// If PREFILL_IN_ORDER is set we sequentially fill the queue from a single thread.
+			if (BENCHMARK::PREFILL_IN_ORDER && idx != 0) {
 				return;
 			}
-			for (size_t i = 0; i < prefill_amount * BENCHMARK::size / (BENCHMARK::need_ordered_data ? 1 : num_threads); i++) {
+			for (size_t i = 0; i < prefill_amount * BENCHMARK::SIZE / (BENCHMARK::PREFILL_IN_ORDER ? 1 : num_threads); i++) {
 				handles[idx].push(i + 1);
 			}
 		}, num_threads, true);
@@ -247,29 +247,27 @@ protected:
 		std::atomic_bool over = false;
 		BENCHMARK b{benchmark_info{num_threads, test_time_seconds}};
 
-		auto joined = std::async([&] {
-			pool.do_work([&](size_t i, std::barrier<>& a) {
-				// Make sure handle is on the stack.
-				typename FIFO::handle handle = std::move(handles[i]);
-				b.template per_thread<FIFO>(i, handle, a, over);
-			}, num_threads);
-		});
+		auto joined = std::async(&thread_pool::do_work, &pool, [&](size_t i, std::barrier<>& a) {
+			// Make sure handle is on the stack.
+			typename FIFO::handle handle = std::move(handles[i]);
+			b.template per_thread<FIFO>(i, handle, a, over);
+		}, num_threads, false);
 		// We signal, then start taking the time because some threads might not have arrived at the signal.
 		pool.signal_and_wait();
 		auto start = std::chrono::steady_clock::now();
-		if constexpr (BENCHMARK::use_timing) {
+		if constexpr (BENCHMARK::HAS_TIMEOUT) {
 			std::this_thread::sleep_until(start + std::chrono::seconds(test_time_seconds));
 			over = true;
-		}
 
-		if constexpr (BENCHMARK::use_timing) {
 			if (joined.wait_for(std::chrono::seconds(10)) == std::future_status::timeout) {
 				std::cout << "Threads did not complete within timeout, assuming deadlock!" << std::endl;
 				std::exit(1);
 			}
 		} else {
 			joined.wait();
-			b.time_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count();
+			if constexpr (BENCHMARK::RECORD_TIME) {
+				b.time_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count();
+			}
 		}
 
 		return b;
