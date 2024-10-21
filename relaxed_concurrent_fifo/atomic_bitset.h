@@ -21,9 +21,17 @@ constexpr bool set_bit_atomic(std::atomic<T>& data, size_t index, std::memory_or
 template <size_t N, typename ARR_TYPE = uint8_t>
 class atomic_bitset {
 private:
+    struct wrapper {
+        alignas(128) std::atomic<ARR_TYPE> atomic;
+        std::atomic<ARR_TYPE>* operator->() { return &atomic; }
+        const std::atomic<ARR_TYPE>* operator->() const { return &atomic; }
+        operator std::atomic<ARR_TYPE>&() { return atomic; }
+        operator const std::atomic<ARR_TYPE>&() const { return atomic; }
+    };
+
     static constexpr size_t bit_count = sizeof(ARR_TYPE) * 8;
     static constexpr size_t array_members = N / bit_count;
-    std::array<std::atomic<ARR_TYPE>, array_members> data;
+    std::array<wrapper, array_members> data;
 
     // This requirement could be lifted in exchange for a more complicated implementation of the claim bit function.
     static_assert(N % bit_count == 0, "Bit count must be dividable by size of array type!");
@@ -70,7 +78,7 @@ public:
     /// <returns>Whether the bit has been newly set. false means the bit had already been 1.</returns>
     constexpr bool set(size_t index, std::memory_order order = std::memory_order_seq_cst) {
         assert(index < size());
-        return set_bit_atomic<true>(data[index / bit_count], index % bit_count, order);
+        return set_bit_atomic<true>(data[index / bit_count].atomic, index % bit_count, order);
     }
 
     /// <summary>
@@ -80,12 +88,12 @@ public:
     /// <returns>Whether the bit has been newly reset. false means the bit had already been 0.</returns>
     constexpr bool reset(size_t index, std::memory_order order = std::memory_order_seq_cst) {
         assert(index < size());
-        return set_bit_atomic<false>(data[index / bit_count], index % bit_count, order);
+        return set_bit_atomic<false>(data[index / bit_count].atomic, index % bit_count, order);
     }
 
     [[nodiscard]] constexpr bool test(size_t index, std::memory_order order = std::memory_order_seq_cst) const {
         assert(index < size());
-        return data[index / bit_count].load(order) & (1ull << (index % bit_count));
+        return data[index / bit_count]->load(order) & (1ull << (index % bit_count));
     }
 
     [[nodiscard]] constexpr bool operator[](size_t index) const {
@@ -94,7 +102,7 @@ public:
 
     [[nodiscard]] constexpr bool any(std::memory_order order = std::memory_order_seq_cst) const {
         for (auto& elem : data) {
-            if (elem.load(order)) {
+            if (elem->load(order)) {
                 return true;
             }
         }
