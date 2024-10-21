@@ -205,7 +205,7 @@ public:
 
 			header_t* header = &write_block->header;
 			uint64_t ei = header->epoch_and_indices.load(std::memory_order_relaxed);
-			uint64_t index;
+			uint16_t index;
 			bool claimed = false;
 			while (get_epoch(ei) != (write_window & 0xffff) || (index = get_write_index(ei)) == CELLS_PER_BLOCK || !header->epoch_and_indices.compare_exchange_weak(ei, ei + 1, std::memory_order_relaxed)) {
 				// We need this in case of a spurious claim where we claim a bit, but can't place an element inside,
@@ -233,7 +233,7 @@ public:
 		std::optional<T> pop() {
 			header_t* header = &read_block->header;
 			uint64_t ei = header->epoch_and_indices.load(std::memory_order_relaxed);
-			uint64_t index;
+			uint16_t index;
 
 			while (get_epoch(ei) != (read_window & 0xffff) || (index = get_read_started_index(ei)) == get_write_index(ei)
 				|| !header->epoch_and_indices.compare_exchange_weak(ei, ei + (1ull << 32), std::memory_order_relaxed)) {
@@ -248,12 +248,12 @@ public:
 			while ((ret = std::move(read_block->cells[index].load(std::memory_order_relaxed))) == 0) { }
 			read_block->cells[index].store(0, std::memory_order_relaxed);
 
-			uint64_t finished_index = get_read_finished_index(header->epoch_and_indices.fetch_add(1ull << 16, std::memory_order_relaxed)) + 1;
+			uint16_t finished_index = get_read_finished_index(header->epoch_and_indices.fetch_add(1 << 16, std::memory_order_relaxed)) + 1;
 			// We need the >= here because between the read of ei and the fetch_add above both a write and a finished read might have occurred
 			// that make our finished_index > our (outdated) write index.
 			if (finished_index >= get_write_index(ei)) {
 				// Apply local read index update.
-				ei = (ei & (0xffffull << 48)) | (finished_index << 32) | (finished_index << 16) | finished_index;
+				ei = (ei & (0xffffull << 48)) | (static_cast<uint64_t>(finished_index) << 32) | (static_cast<uint64_t>(finished_index) << 16) | finished_index;
 				// Before we mark this block as empty, we make it unavailable for other readers and writers of this epoch.
 				if (header->epoch_and_indices.compare_exchange_strong(ei, (read_window + fifo.window_count) << 48, std::memory_order_relaxed)) {
 					window_t& window = fifo.get_window(read_window);
