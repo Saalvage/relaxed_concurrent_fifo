@@ -22,7 +22,7 @@ template <size_t N, typename ARR_TYPE = uint8_t>
 class atomic_bitset {
 private:
     struct wrapper {
-        alignas(128) std::atomic<ARR_TYPE> atomic;
+        alignas(std::hardware_destructive_interference_size) std::atomic<ARR_TYPE> atomic;
         std::atomic<ARR_TYPE>* operator->() { return &atomic; }
         const std::atomic<ARR_TYPE>* operator->() const { return &atomic; }
         operator std::atomic<ARR_TYPE>&() { return atomic; }

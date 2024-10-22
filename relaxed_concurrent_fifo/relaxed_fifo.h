@@ -7,21 +7,17 @@
 #include <random>
 #include <new>
 #include <optional>
+#include <ostream>
 
 #include "atomic_bitset.h"
 
-#include <iostream>
-
 #define LOG_WINDOW_MOVE 0
 
-constexpr size_t CACHE_SIZE =
-#if __cpp_lib_hardware_interference_size >= 201603
-	std::hardware_constructive_interference_size;
-#else
-	64;
-#endif // __cpp_lib_hardware_interference_size
+#if LOG_WINDOW_MOVE
+#include <iostream>
+#endif
 
-template <typename T, size_t BLOCKS_PER_WINDOW_RAW = 8, size_t CELLS_PER_BLOCK = CACHE_SIZE / sizeof(T) - 1, typename BITSET_TYPE = uint8_t>
+template <typename T, size_t BLOCKS_PER_WINDOW_RAW = 1, size_t CELLS_PER_BLOCK = 7, typename BITSET_TYPE = uint8_t>
 class relaxed_fifo {
 private:
 	static constexpr size_t make_po2(size_t size) {
@@ -45,7 +41,7 @@ private:
 	static_assert(sizeof(T) == 8);
 	static_assert(sizeof(std::atomic<T>) == 8);
 
-	struct alignas(8) header_t {
+	struct header_t {
 		// 16 bits epoch, 16 bits read started index, 16 bits read finished index, 16 bits write index
 		std::atomic_uint64_t epoch_and_indices;
 	};
@@ -65,8 +61,8 @@ private:
 	static_assert(sizeof(block_t) == CELLS_PER_BLOCK * sizeof(T) + sizeof(header_t));
 
 	struct window_t {
-		alignas(128) atomic_bitset<BLOCKS_PER_WINDOW, BITSET_TYPE> filled_set;
-		alignas(128) block_t blocks[BLOCKS_PER_WINDOW];
+		alignas(std::hardware_destructive_interference_size) atomic_bitset<BLOCKS_PER_WINDOW, BITSET_TYPE> filled_set;
+		alignas(std::hardware_destructive_interference_size) block_t blocks[BLOCKS_PER_WINDOW];
 	};
 
 	std::unique_ptr<window_t[]> buffer;
@@ -75,8 +71,8 @@ private:
 		return buffer[index & window_count_mod_mask];
 	}
 
-	alignas(128) std::atomic_uint64_t read_window;
-	alignas(128) std::atomic_uint64_t write_window;
+	alignas(std::hardware_destructive_interference_size) std::atomic_uint64_t read_window;
+	alignas(std::hardware_destructive_interference_size) std::atomic_uint64_t write_window;
 
 public:
 	// TODO: Remove unused parameter!!
@@ -98,16 +94,17 @@ public:
 		}
 	}
 
-	void debug_print() {
-		std::cout << "Printing relaxed_fifo:\n"
+	std::ostream& operator<<(std::ostream& os) const {
+		os << "Printing relaxed_fifo:\n"
 			<< "Read: " << read_window << "; Write: " << write_window << '\n';
 		for (size_t i = 0; i < window_count; i++) {
 			for (size_t j = 0; j < BLOCKS_PER_WINDOW; j++) {
 				uint64_t val = buffer[i].blocks[j].header.epoch_and_indices;
-				std::cout << (val >> 48) << " " << ((val >> 32) & 0xffff) << " " << ((val >> 16) & 0xffff) << " " << (val & 0xffff) << " | ";
+				os << (val >> 48) << " " << ((val >> 32) & 0xffff) << " " << ((val >> 16) & 0xffff) << " " << (val & 0xffff) << " | ";
 			}
-			std::cout << "\n======================\n";
+			os << "\n======================\n";
 		}
+		return os;
 	}
 
 	class handle {
