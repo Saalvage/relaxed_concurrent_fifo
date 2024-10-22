@@ -367,22 +367,22 @@ int main() {
 		} break;
 	case 8: {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 1, 7, uint8_t>>("8-bit-bbq-1-7"));
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 2, 63, uint8_t>>("8-bit-bbq-2-63"));
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 4, 127, uint8_t>>("8-bit-bbq-4-127"));
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 8, 127, uint8_t>>("8-bit-bbq-8-127"));
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 1, 7, uint16_t>>("16-bit-bbq-1-7"));
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 2, 63, uint16_t>>("16-bit-bbq-2-63"));
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 4, 127, uint16_t>>("16-bit-bbq-4-127"));
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 8, 127, uint16_t>>("16-bit-bbq-8-127"));
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 1, 7, uint32_t>>("32-bit-bbq-1-7"));
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 2, 63, uint32_t>>("32-bit-bbq-2-63"));
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 4, 127, uint32_t>>("32-bit-bbq-4-127"));
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 8, 127, uint32_t>>("32-bit-bbq-8-127"));
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 1, 7, uint64_t>>("64-bit-bbq-1-7"));
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 2, 63, uint64_t>>("64-bit-bbq-2-63"));
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 4, 127, uint64_t>>("64-bit-bbq-4-127"));
-		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 8, 127, uint64_t>>("64-bit-bbq-8-127"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 1, 7, uint8_t>>("8,bbq-1-7"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 2, 63, uint8_t>>("8,bbq-2-63"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 4, 127, uint8_t>>("8,bbq-4-127"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 8, 127, uint8_t>>("8,bbq-8-127"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 1, 7, uint16_t>>("16,bbq-1-7"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 2, 63, uint16_t>>("16,bbq-2-63"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 4, 127, uint16_t>>("16,bbq-4-127"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 8, 127, uint16_t>>("16,bbq-8-127"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 1, 7, uint32_t>>("32,bbq-1-7"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 2, 63, uint32_t>>("32,bbq-2-63"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 4, 127, uint32_t>>("32,bbq-4-127"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 8, 127, uint32_t>>("32,bbq-8-127"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 1, 7, uint64_t>>("64,bbq-1-7"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 2, 63, uint64_t>>("64,bbq-2-63"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 4, 127, uint64_t>>("64,bbq-4-127"));
+		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 8, 127, uint64_t>>("64,bbq-8-127"));
 		run_benchmark(pool, "bitset-sizes", instances, 0.5, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
 		} break;
 	case 9: {

@@ -9,9 +9,6 @@ while True:
     except OverflowError:
         max_int = int(max_int/10)
 
-class ParameterSet:
-    pass
-
 file = sys.argv[1] if len(sys.argv) > 1 else input("Please enter the .csv data file: ")
 
 def compute(values, out):
