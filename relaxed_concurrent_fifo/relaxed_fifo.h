@@ -70,7 +70,7 @@ private:
 		alignas(std::hardware_destructive_interference_size) block_t blocks[BLOCKS_PER_WINDOW];
 	};
 
-	std::unique_ptr<window_t[]> buffer;
+	const std::unique_ptr<window_t[]> buffer;
 
 	window_t& get_window(size_t index) const {
 		return buffer[index & window_count_mod_mask];
@@ -81,8 +81,10 @@ private:
 
 public:
 	// TODO: Remove unused parameter!!
-	relaxed_fifo([[maybe_unused]] size_t thread_count, size_t size) : window_count(std::max<size_t>(4, make_po2(size / BLOCKS_PER_WINDOW / CELLS_PER_BLOCK))), window_count_mod_mask(window_count - 1) {
-		buffer = std::make_unique<window_t[]>(window_count);
+	relaxed_fifo([[maybe_unused]] size_t thread_count, size_t size) :
+			window_count(std::max<size_t>(4, make_po2(size / BLOCKS_PER_WINDOW / CELLS_PER_BLOCK))),
+			window_count_mod_mask(window_count - 1),
+			buffer(std::make_unique<window_t[]>(window_count)) {
 		read_window = window_count;
 		write_window = window_count + 1;
 		for (size_t i = 1; i < window_count; i++) {
