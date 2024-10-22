@@ -300,11 +300,12 @@ int main() {
 		"[1] FIFO Comparison\n"
 		"[2] Parameter Tuning\n"
 		"[3] Quality\n"
-		"[4] Fill\n"
-		"[5] Empty\n"
-		"[6] Strong Scaling\n"
-		"[7] Bitset Size Comparison\n"
-		"[8] Starvation Comparison\n"
+		"[4] Quality (max thread only)\n"
+		"[5] Fill\n"
+		"[6] Empty\n"
+		"[7] Strong Scaling\n"
+		"[8] Bitset Size Comparison\n"
+		"[9] Starvation Comparison\n"
 		"Input: ";
 	std::cin >> input;
 
@@ -328,19 +329,24 @@ int main() {
 	case 3: {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_quality>>> instances;
 		add_all_benchmarking(instances);
-		run_benchmark(pool, "quality", instances, 0.5, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
+		run_benchmark(pool, "quality", instances, 0.5, processor_counts, 1, TEST_TIME_SECONDS);
 		} break;
 	case 4: {
+		std::vector<std::unique_ptr<benchmark_provider<benchmark_quality>>> instances;
+		add_all_benchmarking(instances);
+		run_benchmark(pool, "quality-max", instances, 0.5, { processor_counts.back()}, 1, TEST_TIME_SECONDS);
+	} break;
+	case 5: {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_fill>>> instances;
 		add_all_benchmarking(instances);
 		run_benchmark(pool, "fill", instances, 0, processor_counts, TEST_ITERATIONS, 0);
 		} break;
-	case 5: {
+	case 6: {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_empty>>> instances;
 		add_all_benchmarking(instances);
 		run_benchmark(pool, "empty", instances, 1, processor_counts, TEST_ITERATIONS, 0);
 		} break;
-	case 6: {
+	case 7: {
 		static constexpr size_t THREADS = 128;
 
 		std::cout << "Benchmarking performance" << std::endl;
@@ -359,7 +365,7 @@ int main() {
 		instances_q.push_back(std::make_unique<benchmark_provider_generic<relaxed_fifo<uint64_t, 8 * THREADS, 127>, benchmark_quality>>("bbq-8-127"));
 		run_benchmark(pool, "ss-quality", instances_q, 0.5, processor_counts, TEST_ITERATIONS, 0);
 		} break;
-	case 7: {
+	case 8: {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
 		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 1, 7, uint8_t>>("8-bit-bbq-1-7"));
 		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 2, 63, uint8_t>>("8-bit-bbq-2-63"));
@@ -379,7 +385,7 @@ int main() {
 		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 8, 127, uint64_t>>("64-bit-bbq-8-127"));
 		run_benchmark(pool, "bitset-sizes", instances, 0.5, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
 		} break;
-	case 8: {
+	case 9: {
 		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
 		add_all_benchmarking(instances);
 		run_benchmark(pool, "comp", instances, 0, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);

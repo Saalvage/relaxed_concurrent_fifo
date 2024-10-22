@@ -82,19 +82,22 @@ private:
 		double avg;
 		double std;
 		std::uint64_t max;
+		std::unordered_map<uint64_t, uint64_t> distribution;
 	};
 
 	static data_point analyze(const std::vector<std::uint64_t>& data) {
 		double avg = std::reduce(std::execution::par_unseq, data.begin(), data.end()) / static_cast<double>(data.size());
+		std::unordered_map<uint64_t, uint64_t> distribution;
 		std::uint64_t max = 0;
-		double std = std::accumulate(data.begin(), data.end(), 0., [&max, avg](double std_it, std::uint64_t new_val) {
+		double std = std::accumulate(data.begin(), data.end(), 0., [&max, &distribution, avg](double std_it, std::uint64_t new_val) {
 			max = std::max(max, new_val);
+			distribution[new_val]++;
 			double diff = new_val - avg;
 			return std_it + diff * diff;
 		});
 		std /= data.size();
 		std = std::sqrt(std);
-		return { avg, std, max };
+		return { avg, std, max, std::move(distribution) };
 	}
 
 public:
@@ -170,10 +173,16 @@ public:
 			delays.emplace_back(delay);
 		}
 
-		auto [r_avg, r_std, r_max] = analyze(rank_errors);
+		auto [r_avg, r_std, r_max, r_dist] = analyze(rank_errors);
 		stream << r_avg << ',' << r_std << ',' << r_max << ',';
-		auto [d_avg, d_std, d_max] = analyze(delays);
-		stream << d_avg << ',' << d_std << ',' << d_max;
+		for (const auto& [x, y] : r_dist) {
+			stream << x << ";" << y << "|";
+		}
+		auto [d_avg, d_std, d_max, d_dist] = analyze(delays);
+		stream << ',' << d_avg << ',' << d_std << ',' << d_max << ',';
+		for (const auto& [x, y] : d_dist) {
+			stream << x << ";" << y << "|";
+		}
 	}
 };
 
