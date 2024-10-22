@@ -53,10 +53,10 @@ private:
 	static_assert(sizeof(header_t) == 8);
 
 	// We use 64 bit return types here to avoid potential deficits through 16-bit comparisons.
-	static constexpr uint64_t get_epoch(uint64_t ei) { return ei >> 48; }
-	static constexpr uint64_t get_read_started_index(uint64_t ei) { return (ei >> 32) & 0xffff; }
-	static constexpr uint64_t get_read_finished_index(uint64_t ei) { return (ei >> 16) & 0xffff; }
-	static constexpr uint64_t get_write_index(uint64_t ei) { return ei & 0xffff; }
+	static constexpr uint16_t get_epoch(uint64_t ei) { return ei >> 48; }
+	static constexpr uint16_t get_read_started_index(uint64_t ei) { return (ei >> 32) & 0xffff; }
+	static constexpr uint16_t get_read_finished_index(uint64_t ei) { return (ei >> 16) & 0xffff; }
+	static constexpr uint16_t get_write_index(uint64_t ei) { return ei & 0xffff; }
 	static constexpr uint64_t epoch_to_header(uint64_t epoch) { return epoch << 48; }
 
 	struct block_t {
@@ -211,7 +211,7 @@ public:
 			uint64_t ei = header->epoch_and_indices.load(std::memory_order_relaxed);
 			uint16_t index;
 			bool claimed = false;
-			while (get_epoch(ei) != (write_window & 0xffff) || (index = get_write_index(ei)) == CELLS_PER_BLOCK || !header->epoch_and_indices.compare_exchange_weak(ei, ei + 1, std::memory_order_relaxed)) {
+			while (get_epoch(ei) != static_cast<uint16_t>(write_window) || (index = get_write_index(ei)) == CELLS_PER_BLOCK || !header->epoch_and_indices.compare_exchange_weak(ei, ei + 1, std::memory_order_relaxed)) {
 				// We need this in case of a spurious claim where we claim a bit, but can't place an element inside,
 				// because the write window was already forced-moved.
 				// This is safe to do because writers are exclusive.
@@ -239,7 +239,7 @@ public:
 			uint64_t ei = header->epoch_and_indices.load(std::memory_order_relaxed);
 			uint16_t index;
 
-			while (get_epoch(ei) != (read_window & 0xffff) || (index = get_read_started_index(ei)) == get_write_index(ei)
+			while (get_epoch(ei) != static_cast<uint16_t>(read_window) || (index = get_read_started_index(ei)) == get_write_index(ei)
 				|| !header->epoch_and_indices.compare_exchange_weak(ei, ei + (1ull << 32), std::memory_order_relaxed)) {
 				if (!claim_new_block_read()) {
 					return std::nullopt;
