@@ -40,17 +40,16 @@ public:
 	}
 };
 
-template <typename T, size_t K>
-struct ws_bs_k_fifo : scal_wrapper_base<T, scal::BoundedSizeKFifo> {
+template <typename T>
+struct ws_k_fifo : scal_wrapper_base<T, scal::BoundedSizeKFifo> {
 public:
-	// TODO: We allow the queue here the same courtesy of at least 4 segments, not sure if that's correct or they should have more.
-	ws_bs_k_fifo(size_t thread_count, size_t size) : scal_wrapper_base<T, scal::BoundedSizeKFifo>{thread_count * K, std::max<size_t>(4, size / K / thread_count)} { }
+	ws_k_fifo(size_t thread_count, size_t size, size_t k) : scal_wrapper_base<T, scal::BoundedSizeKFifo>{thread_count * k, std::max<size_t>(4, size / k / thread_count)} { }
 };
 
-template <typename T, size_t K>
-struct ss_bs_k_fifo : scal_wrapper_base<T, scal::BoundedSizeKFifo> {
+template <typename T>
+struct ss_k_fifo : scal_wrapper_base<T, scal::BoundedSizeKFifo> {
 public:
-	ss_bs_k_fifo([[maybe_unused]] size_t thread_count, size_t size) : scal_wrapper_base<T, scal::BoundedSizeKFifo>{ K, std::max<size_t>(4, size / K) } {}
+	ss_k_fifo([[maybe_unused]] size_t thread_count, size_t size, size_t k) : scal_wrapper_base<T, scal::BoundedSizeKFifo>{ k, std::max<size_t>(4, size / k) } {}
 };
 
 template <typename T>
@@ -61,14 +60,14 @@ public:
 	}
 };
 
-template <typename T, size_t S>
+template <typename T>
 struct ws_segment_queue : scal_wrapper_base<T, scal::SegmentQueue> {
-	ws_segment_queue(size_t thread_count, [[maybe_unused]] size_t size) : scal_wrapper_base<T, scal::SegmentQueue>{thread_count * S} { }
+	ws_segment_queue(size_t thread_count, [[maybe_unused]] size_t size, size_t s) : scal_wrapper_base<T, scal::SegmentQueue>{thread_count * s} { }
 };
 
-template <typename T, size_t S>
+template <typename T>
 struct ss_segment_queue : scal_wrapper_base<T, scal::SegmentQueue> {
-	ss_segment_queue([[maybe_unused]] size_t thread_count, [[maybe_unused]] size_t size) : scal_wrapper_base<T, scal::SegmentQueue>{ S } {}
+	ss_segment_queue([[maybe_unused]] size_t thread_count, [[maybe_unused]] size_t size, size_t s) : scal_wrapper_base<T, scal::SegmentQueue>{ s } {}
 };
 
 #endif // BSKFIFO_WRAPPER_H_INCLUDED
