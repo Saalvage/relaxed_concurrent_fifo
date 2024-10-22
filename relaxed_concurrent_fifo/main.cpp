@@ -191,6 +191,8 @@ void run_benchmark(thread_pool& pool, const std::string& test_name, const std::v
 
 template <typename BENCHMARK>
 void add_all_parameter_tuning(std::vector<std::unique_ptr<benchmark_provider<BENCHMARK>>>& instances) {
+	instances.push_back(std::make_unique<benchmark_provider_relaxed<BENCHMARK, 1, 1>>("1,1,bbq"));
+	instances.push_back(std::make_unique<benchmark_provider_relaxed<BENCHMARK, 1, 3>>("1,3,bbq"));
 	instances.push_back(std::make_unique<benchmark_provider_relaxed<BENCHMARK, 1, 7>>("1,7,bbq"));
 	instances.push_back(std::make_unique<benchmark_provider_relaxed<BENCHMARK, 1, 15>>("1,15,bbq"));
 	instances.push_back(std::make_unique<benchmark_provider_relaxed<BENCHMARK, 1, 31>>("1,31,bbq"));
