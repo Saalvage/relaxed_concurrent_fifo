@@ -4,6 +4,7 @@
 #include "boundedsize_kfifo.h"
 #include "rts_queue.h"
 #include "segment_queue.h"
+#include "random_dequeue_queue.h"
 
 template <typename T, template <typename> typename FIFO>
 struct scal_wrapper_base {
@@ -68,6 +69,16 @@ struct ws_segment_queue : scal_wrapper_base<T, scal::SegmentQueue> {
 template <typename T>
 struct ss_segment_queue : scal_wrapper_base<T, scal::SegmentQueue> {
 	ss_segment_queue([[maybe_unused]] size_t thread_count, [[maybe_unused]] size_t size, size_t s) : scal_wrapper_base<T, scal::SegmentQueue>{ s } {}
+};
+
+template <typename T>
+struct ws_random_dequeue_queue : scal_wrapper_base<T, scal::RandomDequeueQueue> {
+	ws_random_dequeue_queue([[maybe_unused]] size_t thread_count, [[maybe_unused]] size_t size, size_t quasi_factor, size_t max_retries) : scal_wrapper_base<T, scal::RandomDequeueQueue>{ thread_count * quasi_factor, max_retries } {}
+};
+
+template <typename T>
+struct ss_random_dequeue_queue : scal_wrapper_base<T, scal::RandomDequeueQueue> {
+	ss_random_dequeue_queue([[maybe_unused]] size_t thread_count, [[maybe_unused]] size_t size, size_t quasi_factor, size_t max_retries) : scal_wrapper_base<T, scal::RandomDequeueQueue>{ quasi_factor, max_retries } {}
 };
 
 #endif // BSKFIFO_WRAPPER_H_INCLUDED

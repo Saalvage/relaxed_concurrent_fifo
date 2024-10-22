@@ -321,10 +321,16 @@ private:
 
 #ifdef __GNUC__
 template <typename BENCHMARK>
+using benchmark_provider_ws_kfifo = benchmark_provider_generic<ws_k_fifo<uint64_t>, BENCHMARK, size_t>;
+
+template <typename BENCHMARK>
 using benchmark_provider_ss_kfifo = benchmark_provider_generic<ss_k_fifo<uint64_t>, BENCHMARK, size_t>;
 
 template <typename BENCHMARK>
-using benchmark_provider_ws_kfifo = benchmark_provider_generic<ws_k_fifo<uint64_t>, BENCHMARK, size_t>;
+using benchmark_provider_ws_rdq = benchmark_provider_generic<ws_random_dequeue_queue<uint64_t>, BENCHMARK, size_t, size_t>;
+
+template <typename BENCHMARK>
+using benchmark_provider_ss_rdq = benchmark_provider_generic<ss_random_dequeue_queue<uint64_t>, BENCHMARK, size_t, size_t>;
 #endif // __GNUC__
 
 template <typename BENCHMARK, size_t BLOCK_MULTIPLIER, size_t CELLS_PER_BLOCK, typename BITSET_TYPE = uint8_t>
