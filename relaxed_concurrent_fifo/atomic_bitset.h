@@ -8,6 +8,11 @@
 #include <limits>
 #include <random>
 
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winterference-size"
+#endif // __GNUC__
+
 template <bool SET, typename T>
 constexpr bool set_bit_atomic(std::atomic<T>& data, size_t index, std::memory_order order = std::memory_order_seq_cst) {
     T mask = static_cast<T>(1) << index;
@@ -132,5 +137,9 @@ public:
         return std::numeric_limits<size_t>::max();
     }
 };
+
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif // __GNUC__
 
 #endif // ATOMIC_BITSET_H_INCLUDED

@@ -17,6 +17,11 @@
 #include <iostream>
 #endif
 
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winterference-size"
+#endif // __GNUC__
+
 template <typename T, size_t BLOCKS_PER_WINDOW_RAW = 1, size_t CELLS_PER_BLOCK = 7, typename BITSET_TYPE = uint8_t>
 class relaxed_fifo {
 private:
@@ -270,5 +275,9 @@ public:
 	handle get_handle() { return handle(*this); }
 };
 static_assert(fifo<relaxed_fifo<uint64_t>, uint64_t>);
+
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif // __GNUC__
 
 #endif // RELAXED_FIFO_H_INCLUDED
