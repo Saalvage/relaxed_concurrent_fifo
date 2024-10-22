@@ -18,12 +18,12 @@
 #include "util/atomic_value_new.h"
 #include "util/random.h"
 
-namespace scal {
+namespace scal_sq {
 
 namespace detail {
 
 template<typename T>
-class Pair : public ThreadLocalMemory<64> {
+class Pair : public scal::ThreadLocalMemory<64> {
  public:
   _always_inline explicit Pair(T value)
       : deleted(false) {
@@ -36,14 +36,14 @@ class Pair : public ThreadLocalMemory<64> {
 
 
 template<typename T>
-class Node  : public ThreadLocalMemory<64> {
+class Node  : public scal::ThreadLocalMemory<64> {
  public:
   typedef TaggedValue<Node*> NodePtr;
   typedef AtomicTaggedValue<Node*, 0, 64> AtomicNodePtr;
 
   _always_inline Node(uint64_t s) 
       : segment(static_cast<Pair<T>**>(
-          ThreadLocalAllocator::Get().CallocAligned(
+          scal::ThreadLocalAllocator::Get().CallocAligned(
               s, sizeof(Pair<T>*), 64)))
       , next_(NodePtr(NULL, 0)) {
     for (uint64_t i = 0; i < s; i++) {

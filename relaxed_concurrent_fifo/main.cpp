@@ -269,6 +269,20 @@ void add_all_parameter_tuning(std::vector<std::unique_ptr<benchmark_provider<BEN
 	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("1023,1024,rdq", 1023, 1024));
 	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("2047,1024,rdq", 2047, 1024));
 	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("4095,1024,rdq", 4095, 1024));
+	instances.push_back(std::make_unique<benchmark_provider_ss_lruq<BENCHMARK>>("1,lruq", 1));
+	instances.push_back(std::make_unique<benchmark_provider_ss_lruq<BENCHMARK>>("2,lruq", 2));
+	instances.push_back(std::make_unique<benchmark_provider_ss_lruq<BENCHMARK>>("4,lruq", 4));
+	instances.push_back(std::make_unique<benchmark_provider_ss_lruq<BENCHMARK>>("8,lruq", 8));
+	instances.push_back(std::make_unique<benchmark_provider_ss_lruq<BENCHMARK>>("16,lruq", 16));
+	instances.push_back(std::make_unique<benchmark_provider_ss_lruq<BENCHMARK>>("32,lruq", 32));
+	instances.push_back(std::make_unique<benchmark_provider_ss_lruq<BENCHMARK>>("64,lruq", 64));
+	instances.push_back(std::make_unique<benchmark_provider_ss_lruq<BENCHMARK>>("128,lruq", 128));
+	instances.push_back(std::make_unique<benchmark_provider_ss_lruq<BENCHMARK>>("256,lruq", 256));
+	instances.push_back(std::make_unique<benchmark_provider_ss_lruq<BENCHMARK>>("512,lruq", 512));
+	instances.push_back(std::make_unique<benchmark_provider_ss_lruq<BENCHMARK>>("1024,lruq", 1024));
+	instances.push_back(std::make_unique<benchmark_provider_ss_lruq<BENCHMARK>>("2048,lruq", 2048));
+	instances.push_back(std::make_unique<benchmark_provider_ss_lruq<BENCHMARK>>("4096,lruq", 4096));
+	instances.push_back(std::make_unique<benchmark_provider_ss_lruq<BENCHMARK>>("8192,lruq", 8192));
 	instances.push_back(std::make_unique<benchmark_provider_generic<rts_queue<uint64_t>, BENCHMARK>>("rts-queue"));
 	instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, LCRQWrapped>, BENCHMARK>>("lcrq"));
 #endif // __GNUC__

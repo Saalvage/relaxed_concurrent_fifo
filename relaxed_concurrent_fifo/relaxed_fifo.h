@@ -107,7 +107,7 @@ public:
 		for (size_t i = 0; i < window_count; i++) {
 			for (size_t j = 0; j < BLOCKS_PER_WINDOW; j++) {
 				uint64_t val = buffer[i].blocks[j].header.epoch_and_indices;
-				os << (val >> 48) << " " << ((val >> 32) & 0xffff) << " " << ((val >> 16) & 0xffff) << " " << (val & 0xffff) << " | ";
+				os << get_epoch(val) << " " << get_read_started_index(val) << " " << get_read_finished_index(val) << " " << get_write_index(val) << " | ";
 			}
 			os << "\n======================\n";
 		}

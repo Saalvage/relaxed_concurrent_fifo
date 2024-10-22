@@ -23,6 +23,7 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
+#pragma GCC diagnostic ignored "-Wvla"
 
 #include "contenders/LCRQ/LCRQueue.hpp"
 
@@ -331,6 +332,12 @@ using benchmark_provider_ws_rdq = benchmark_provider_generic<ws_random_dequeue_q
 
 template <typename BENCHMARK>
 using benchmark_provider_ss_rdq = benchmark_provider_generic<ss_random_dequeue_queue<uint64_t>, BENCHMARK, size_t, size_t>;
+
+template <typename BENCHMARK>
+using benchmark_provider_ws_lruq = benchmark_provider_generic<ws_lru_distributed_queue<uint64_t>, BENCHMARK, size_t>;
+
+template <typename BENCHMARK>
+using benchmark_provider_ss_lruq = benchmark_provider_generic<ss_lru_distributed_queue<uint64_t>, BENCHMARK, size_t>;
 #endif // __GNUC__
 
 template <typename BENCHMARK, size_t BLOCK_MULTIPLIER, size_t CELLS_PER_BLOCK, typename BITSET_TYPE = uint8_t>
