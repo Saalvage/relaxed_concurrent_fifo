@@ -20,19 +20,25 @@ def compute(values, out):
     for i in range(len(res)):
         curr = float(total - running_total) / total
         if curr <= goal:
-            out.write(str(res[i][0]) + " " + str(float(total - running_total) / total) + "\n")
+            out.write(str(res[i][0] + 1 if res[i][0] != 0 else 1) + " " + str(float(total - running_total) / total) + "\n")
             goal -= 0.01
         running_total += res[i][1]
         # Consciously ignoring the last 1%
     out.write("\n")
 
 done = { }
+threads = 0
 
-with open(file) as file:
-    lines = csv.reader(file)
+with open(file) as f:
+    lines = csv.reader(f)
+    for row in lines:
+        threads = max(threads, int(row[1]))
+
+with open(file) as f:
+    lines = csv.reader(f)
     for row in lines:
         # We have enough data as-is, only use a single testrun
-        if row[0] not in done:
+        if int(row[1]) == threads and row[0] not in done:
             with open(row[0] + "_rank_error.txt", "w") as out:
                 compute(row[5], out)
             with open(row[0] + "_delay.txt", "w") as out:
