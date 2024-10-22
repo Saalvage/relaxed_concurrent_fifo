@@ -55,6 +55,6 @@ for k, parameters in values.items():
         print(fit)
 
     for parameter, x, xstd, y, ystd in zip(parameters.keys(), x, xstd, y, ystd):
-        print(str(x) + " " + str(y) + " " + str(xstd) + " " + str(ystd) + " ".join(parameter))
+        print(str(x) + " " + str(y) + " " + str(xstd) + " " + str(ystd) + " " + " ".join(parameter))
 
     print()
