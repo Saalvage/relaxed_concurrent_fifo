@@ -1,6 +1,13 @@
 #pragma once
 
+#ifdef _WIN32
+#pragma warning(push)
+#pragma warning(disable:4146)
+#endif // _WIN32
 #include "pcg_random.hpp"
+#ifdef _WIN32
+#pragma warning(pop)
+#endif // _WIN32
 
 #include <algorithm>
 #include <array>

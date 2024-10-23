@@ -70,7 +70,9 @@
     #elif __powerpc__ || __POWERPC__ || __ppc__ || __PPC__ \
           || __m68k__ || __mc68000__
         #define PCG_LITTLE_ENDIAN 0
-    #else
+    #elif defined(_WIN32)
+		#define PCG_LITTLE_ENDIAN 1
+	#else
         #error Unable to determine target endianness
     #endif
 #endif
