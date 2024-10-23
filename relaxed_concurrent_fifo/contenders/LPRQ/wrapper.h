@@ -1,5 +1,5 @@
-#ifndef LCRQ_WRAPPER_H_INCLUDED
-#define LCRQ_WRAPPER_H_INCLUDED
+#ifndef LPRQ_WRAPPER_H_INCLUDED
+#define LPRQ_WRAPPER_H_INCLUDED
 
 template <typename T, template <typename> typename FIFO>
 struct adapter {
@@ -35,4 +35,4 @@ public:
 	}
 };
 
-#endif // LCRQ_WRAPPER_H_INCLUDED
+#endif // LPRQ_WRAPPER_H_INCLUDED

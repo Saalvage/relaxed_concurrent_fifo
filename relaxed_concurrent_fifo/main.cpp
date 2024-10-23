@@ -4,8 +4,8 @@
 #include "relaxed_fifo.h"
 #include "concurrent_fifo.h"
 
-#include "contenders/LCRQ/wrapper.h"
-#include "contenders/LCRQ/MichaelScottQueue.hpp"
+#include "contenders/LPRQ/wrapper.h"
+#include "contenders/LPRQ/MichaelScottQueue.hpp"
 
 #include <thread>
 #include <functional>
@@ -246,44 +246,8 @@ void add_all_parameter_tuning(std::vector<std::unique_ptr<benchmark_provider<BEN
 	instances.push_back(std::make_unique<benchmark_provider_ss_kfifo<BENCHMARK>>("2048,kfifo", 2048));
 	instances.push_back(std::make_unique<benchmark_provider_ss_kfifo<BENCHMARK>>("4096,kfifo", 4096));
 	instances.push_back(std::make_unique<benchmark_provider_ss_kfifo<BENCHMARK>>("8192,kfifo", 8192));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("1,8,rdq", 1, 8));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("3,8,rdq", 3, 8));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("7,8,rdq", 7, 8));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("15,8,rdq", 15, 8));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("31,8,rdq", 31, 8));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("63,8,rdq", 63, 8));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("127,8,rdq", 127, 8));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("255,8,rdq", 255, 8));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("511,8,rdq", 511, 8));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("1023,8,rdq", 1023, 8));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("2047,8,rdq", 2047, 8));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("4095,8,rdq", 4095, 8));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("1,128,rdq", 1, 128));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("3,128,rdq", 3, 128));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("7,128,rdq", 7, 128));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("15,128,rdq", 15, 128));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("31,128,rdq", 31, 128));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("63,128,rdq", 63, 128));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("127,128,rdq", 127, 128));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("255,128,rdq", 255, 128));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("511,128,rdq", 511, 128));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("1023,128,rdq", 1023, 128));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("2047,128,rdq", 2047, 128));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("4095,128,rdq", 4095, 128));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("1,1024,rdq", 1, 1024));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("3,1024,rdq", 3, 1024));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("7,1024,rdq", 7, 1024));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("15,1024,rdq", 15, 1024));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("31,1024,rdq", 31, 1024));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("63,1024,rdq", 63, 1024));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("127,1024,rdq", 127, 1024));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("255,1024,rdq", 255, 1024));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("511,1024,rdq", 511, 1024));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("1023,1024,rdq", 1023, 1024));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("2047,1024,rdq", 2047, 1024));
-	instances.push_back(std::make_unique<benchmark_provider_ss_rdq<BENCHMARK>>("4095,1024,rdq", 4095, 1024));
 	instances.push_back(std::make_unique<benchmark_provider_generic<rts_queue<uint64_t>, BENCHMARK>>("rts-queue"));
-	instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, LCRQWrapped>, BENCHMARK>>("lcrq"));
+	instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, LPRQWrapped>, BENCHMARK>>("lcrq"));*/
 #endif // __GNUC__
 }
 
@@ -305,7 +269,7 @@ void add_all_benchmarking(std::vector<std::unique_ptr<benchmark_provider<BENCHMA
 	instances.push_back(std::make_unique<benchmark_provider_ss_kfifo<BENCHMARK>>("ss-2048-kfifo", 2048));
 	instances.push_back(std::make_unique<benchmark_provider_ss_kfifo<BENCHMARK>>("ss-4096-kfifo", 4096));
 	instances.push_back(std::make_unique<benchmark_provider_generic<rts_queue<uint64_t>, BENCHMARK>>("rts-queue"));
-	instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, LCRQWrapped>, BENCHMARK>>("lcrq"));
+	instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, LPRQWrapped>, BENCHMARK>>("lcrq"));
 #endif // __GNUC__
 	//instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, MichaelScottQueue>, BENCHMARK>>("msq"));
 	instances.push_back(std::make_unique<benchmark_provider_generic<lock_fifo<uint64_t>, BENCHMARK>>("lock-fifo"));
