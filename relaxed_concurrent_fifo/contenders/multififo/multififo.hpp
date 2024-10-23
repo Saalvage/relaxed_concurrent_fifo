@@ -63,9 +63,9 @@ class MultiFifo {
             return ret;
         }
 
-        explicit Context(size_type thread_count, size_t size, int stickiness, int seed,
+        explicit Context(size_type queue_count, size_t size, int stickiness, int seed,
                          allocator_type const &alloc)
-            : num_queues_{thread_count * 2},
+            : num_queues_{queue_count},
               queue_guards_{std::allocator_traits<internal_allocator_type>::allocate(alloc_, num_queues_)},
               stickiness_{stickiness},
               seed_{seed},
@@ -119,9 +119,9 @@ class MultiFifo {
    public:
     using handle = Handle<Context>;
 
-    explicit MultiFifo(size_type num_threads, size_t size, int stickiness = 16,
+    explicit MultiFifo(size_type num_threads, size_t size, int thread_multiplier, int stickiness = 16,
                        int seed = 1, allocator_type const &alloc = {})
-        : context_{num_threads, size, stickiness, seed,
+        : context_{num_threads * thread_multiplier, size, stickiness, seed,
                    internal_allocator_type(alloc)} {
     }
 
