@@ -348,7 +348,7 @@ using benchmark_provider_ss_lruq = benchmark_provider_generic<ss_lru_distributed
 #endif // __GNUC__
 
 template <typename BENCHMARK>
-using benchmark_provider_ws_multififo = benchmark_provider_generic<multififo::MultiFifo<uint64_t>, BENCHMARK, int, int>;
+using benchmark_provider_multififo = benchmark_provider_generic<multififo::MultiFifo<uint64_t>, BENCHMARK, int, int>;
 
 template <typename BENCHMARK, size_t BLOCK_MULTIPLIER, size_t CELLS_PER_BLOCK, typename BITSET_TYPE = uint8_t>
 class benchmark_provider_relaxed : public benchmark_provider<BENCHMARK> {
