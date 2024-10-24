@@ -340,7 +340,6 @@ int main() {
 		"[6] Empty\n"
 		"[7] Strong Scaling\n"
 		"[8] Bitset Size Comparison\n"
-		"[9] Starvation Comparison\n"
 		"Input: ";
 	std::cin >> input;
 
@@ -419,11 +418,6 @@ int main() {
 		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 4, 127, uint64_t>>("64,bbq-4-127"));
 		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 8, 127, uint64_t>>("64,bbq-8-127"));
 		run_benchmark(pool, "bitset-sizes", instances, 0.5, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
-		} break;
-	case 9: {
-		std::vector<std::unique_ptr<benchmark_provider<benchmark_default>>> instances;
-		add_all_benchmarking(instances);
-		run_benchmark(pool, "comp", instances, 0, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
 		} break;
 	}
 
