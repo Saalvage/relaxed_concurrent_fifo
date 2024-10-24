@@ -290,6 +290,7 @@ void add_all_benchmarking(std::vector<std::unique_ptr<benchmark_provider<BENCHMA
 	instances.push_back(std::make_unique<benchmark_provider_multififo<BENCHMARK>>("2-4-multififo", 2, 4));
 	instances.push_back(std::make_unique<benchmark_provider_multififo<BENCHMARK>>("4-32-multififo", 4, 32));
 	instances.push_back(std::make_unique<benchmark_provider_multififo<BENCHMARK>>("4-256-multififo", 4, 256));
+	instances.push_back(std::make_unique<benchmark_provider_multififo<BENCHMARK>>("4-512-multififo", 4, 512));
 	instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, LPRQWrapped>, BENCHMARK>>("lprq"));
 #endif // __GNUC__
 }

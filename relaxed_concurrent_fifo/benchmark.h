@@ -123,12 +123,12 @@ private:
 	}
 
 public:
-	static constexpr size_t CHUNK_SIZE  = 5'000;
-	static constexpr size_t CHUNK_COUNT = 1'000;
+	static constexpr int CHUNK_SIZE  = 5'000;
+	static constexpr int CHUNK_COUNT = 1'000;
 
 	benchmark_quality(const benchmark_info& info) : results(info.num_threads) {
 		// Double the amount of "expected" load for this thread.
-		size_t size_per_thread = CHUNK_SIZE * CHUNK_COUNT / info.num_threads * 2;
+		int size_per_thread = CHUNK_SIZE * CHUNK_COUNT / info.num_threads * 2;
 		for (auto& vec : results) {
 			vec.reserve(size_per_thread);
 		}

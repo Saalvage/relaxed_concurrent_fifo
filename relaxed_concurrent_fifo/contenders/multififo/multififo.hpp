@@ -48,7 +48,7 @@ class MultiFifo {
         using clock_type = std::chrono::steady_clock;
 
        private:
-        size_type num_queues_{};
+        int num_queues_{};
         guard_type *queue_guards_{nullptr};
         std::atomic_int id_count{0};
         int stickiness_{16};
@@ -63,7 +63,7 @@ class MultiFifo {
             return ret;
         }
 
-        explicit Context(size_type queue_count, size_t size, int stickiness, int seed,
+        explicit Context(int queue_count, size_t size, int stickiness, int seed,
                          allocator_type const &alloc)
             : num_queues_{queue_count},
               queue_guards_{std::allocator_traits<internal_allocator_type>::allocate(alloc_, num_queues_)},
@@ -119,7 +119,7 @@ class MultiFifo {
    public:
     using handle = Handle<Context>;
 
-    explicit MultiFifo(size_type num_threads, size_t size, int thread_multiplier, int stickiness = 16,
+    explicit MultiFifo(int num_threads, size_t size, int thread_multiplier, int stickiness = 16,
                        int seed = 1, allocator_type const &alloc = {})
         : context_{num_threads * thread_multiplier, size, stickiness, seed,
                    internal_allocator_type(alloc)} {
