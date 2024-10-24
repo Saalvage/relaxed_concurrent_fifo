@@ -56,7 +56,7 @@ void thread_pool::do_work(std::function<void(int, std::barrier<>&)> func, int th
 	for (int i = 0; i < thread_count; i++) {
 		sems[i]->release();
 	}
-	if (thread_count < threads.size()) {
+	if (thread_count < static_cast<int>(threads.size())) {
 		std::ignore = barrier.arrive(threads.size() - thread_count);
 	}
 
@@ -66,7 +66,7 @@ void thread_pool::do_work(std::function<void(int, std::barrier<>&)> func, int th
 	barrier.arrive_and_wait();
 
 	// Wait until all threads have concluded.
-	if (thread_count < threads.size()) {
+	if (thread_count < static_cast<int>(threads.size())) {
 		std::ignore = barrier.arrive(threads.size() - thread_count);
 	}
 	std::ignore = barrier.arrive();
