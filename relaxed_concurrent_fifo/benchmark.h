@@ -89,6 +89,7 @@ struct benchmark_default : benchmark_base<> {
 	}
 };
 
+template <bool INCLUDE_DISTRIBUTION = false>
 struct benchmark_quality : benchmark_base<false, false, true> {
 private:
 	std::atomic_uint64_t chunks_done = 0;
@@ -113,7 +114,9 @@ private:
 		std::uint64_t max = 0;
 		double std = std::accumulate(data.begin(), data.end(), 0., [&max, &distribution, avg](double std_it, std::uint64_t new_val) {
 			max = std::max(max, new_val);
-			distribution[new_val]++;
+			if constexpr (INCLUDE_DISTRIBUTION) {
+				distribution[new_val]++;
+			}
 			double diff = new_val - avg;
 			return std_it + diff * diff;
 		});
@@ -196,7 +199,7 @@ public:
 		}
 
 		auto [r_avg, r_std, r_max, r_dist] = analyze(rank_errors);
-		stream << r_avg << ',' << r_std << ',' << r_max << ',';
+		stream << r_avg << ',' << r_std << ',' << r_max;
 		for (const auto& [x, y] : r_dist) {
 			stream << x << ";" << y << "|";
 		}
