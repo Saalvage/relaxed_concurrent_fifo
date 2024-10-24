@@ -285,22 +285,13 @@ void add_all_benchmarking(std::vector<std::unique_ptr<benchmark_provider<BENCHMA
 	instances.push_back(std::make_unique<benchmark_provider_relaxed<BENCHMARK, 4, 127>>("bbq-4-127"));
 	instances.push_back(std::make_unique<benchmark_provider_relaxed<BENCHMARK, 8, 127>>("bbq-8-127"));
 #ifdef __GNUC__
-	instances.push_back(std::make_unique<benchmark_provider_ws_kfifo<BENCHMARK>>("ws-8-kfifo", 8));
-	instances.push_back(std::make_unique<benchmark_provider_ws_kfifo<BENCHMARK>>("ws-128-kfifo", 128));
-	instances.push_back(std::make_unique<benchmark_provider_ws_kfifo<BENCHMARK>>("ws-512-kfifo", 512));
-	instances.push_back(std::make_unique<benchmark_provider_ws_kfifo<BENCHMARK>>("ws-1024-kfifo", 1024));
-	instances.push_back(std::make_unique<benchmark_provider_ss_kfifo<BENCHMARK>>("ss-8-kfifo", 8));
-	instances.push_back(std::make_unique<benchmark_provider_ss_kfifo<BENCHMARK>>("ss-128-kfifo", 128));
+	instances.push_back(std::make_unique<benchmark_provider_ws_kfifo<BENCHMARK>>("ws-1-kfifo", 1));
 	instances.push_back(std::make_unique<benchmark_provider_ss_kfifo<BENCHMARK>>("ss-512-kfifo", 512));
-	instances.push_back(std::make_unique<benchmark_provider_ss_kfifo<BENCHMARK>>("ss-1024-kfifo", 1024));
-	instances.push_back(std::make_unique<benchmark_provider_ss_kfifo<BENCHMARK>>("ss-2048-kfifo", 2048));
-	instances.push_back(std::make_unique<benchmark_provider_ss_kfifo<BENCHMARK>>("ss-4096-kfifo", 4096));
-	instances.push_back(std::make_unique<benchmark_provider_generic<rts_queue<uint64_t>, BENCHMARK>>("rts-queue"));
+	instances.push_back(std::make_unique<benchmark_provider_multififo<BENCHMARK>>("2-4-multififo", 2, 4));
+	instances.push_back(std::make_unique<benchmark_provider_multififo<BENCHMARK>>("4-32-multififo", 4, 32));
+	instances.push_back(std::make_unique<benchmark_provider_multififo<BENCHMARK>>("4-256-multififo", 4, 256));
 	instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, LPRQWrapped>, BENCHMARK>>("lprq"));
 #endif // __GNUC__
-	//instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, MichaelScottQueue>, BENCHMARK>>("msq"));
-	instances.push_back(std::make_unique<benchmark_provider_generic<lock_fifo<uint64_t>, BENCHMARK>>("lock-fifo"));
-	instances.push_back(std::make_unique<benchmark_provider_generic<concurrent_fifo<uint64_t>, BENCHMARK>>("concurrent-fifo"));
 }
 
 int main() {
