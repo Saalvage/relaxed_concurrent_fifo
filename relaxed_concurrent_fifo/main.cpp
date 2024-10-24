@@ -287,10 +287,10 @@ void add_all_benchmarking(std::vector<std::unique_ptr<benchmark_provider<BENCHMA
 #ifdef __GNUC__
 	instances.push_back(std::make_unique<benchmark_provider_ws_kfifo<BENCHMARK>>("ws-1-kfifo", 1));
 	instances.push_back(std::make_unique<benchmark_provider_ss_kfifo<BENCHMARK>>("ss-512-kfifo", 512));
-	instances.push_back(std::make_unique<benchmark_provider_multififo<BENCHMARK>>("2-4-multififo", 2, 4));
-	instances.push_back(std::make_unique<benchmark_provider_multififo<BENCHMARK>>("4-32-multififo", 4, 32));
+	instances.push_back(std::make_unique<benchmark_provider_multififo<BENCHMARK>>("2-2-multififo", 2, 2));
+	instances.push_back(std::make_unique<benchmark_provider_multififo<BENCHMARK>>("4-16-multififo", 4, 16));
+	instances.push_back(std::make_unique<benchmark_provider_multififo<BENCHMARK>>("4-128-multififo", 4, 128));
 	instances.push_back(std::make_unique<benchmark_provider_multififo<BENCHMARK>>("4-256-multififo", 4, 256));
-	instances.push_back(std::make_unique<benchmark_provider_multififo<BENCHMARK>>("4-512-multififo", 4, 512));
 	instances.push_back(std::make_unique<benchmark_provider_generic<adapter<uint64_t, LPRQWrapped>, BENCHMARK>>("lprq"));
 #endif // __GNUC__
 }
