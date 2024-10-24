@@ -20,16 +20,16 @@ private:
 	std::barrier<> barrier;
 	std::stop_source ss;
 
-	std::function<void(size_t, std::barrier<>&)> per_thread;
+	std::function<void(int, std::barrier<>&)> per_thread;
 
 public:
 	explicit thread_pool();
 	~thread_pool();
 
-	void do_work(std::function<void(size_t, std::barrier<>&)> func, size_t thread_count, bool do_signaling = false);
+	void do_work(std::function<void(int, std::barrier<>&)> func, int thread_count, bool do_signaling = false);
 	void signal_and_wait();
 
-	size_t max_threads() const;
+	int max_threads() const;
 };
 
 #endif // THREAD_POOL_H_INCLUDED

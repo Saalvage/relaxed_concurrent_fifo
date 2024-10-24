@@ -41,8 +41,13 @@ using LPRQWrapped = LPRQueue<T>;
 // and the benchmark provider, which effectively provides a concrete queue implementation to the benchmark.
 
 struct benchmark_info {
-	size_t num_threads;
-	size_t test_time_seconds;
+	int num_threads;
+	int test_time_seconds;
+};
+
+struct benchmark_info_prodcon : public benchmark_info {
+	int producers;
+	int consumers;
 };
 
 template <bool HAS_TIMEOUT_T = true, bool RECORD_TIME_T = false, bool PREFILL_IN_ORDER_T = false, size_t SIZE_T = 0>
@@ -67,7 +72,7 @@ struct benchmark_default : benchmark_base<> {
 	benchmark_default(const benchmark_info& info) : results(info.num_threads), test_time_seconds(info.test_time_seconds) { }
 
 	template <typename T>
-	void per_thread(size_t thread_index, typename T::handle& handle, std::barrier<>& a, std::atomic_bool& over) {
+	void per_thread(int thread_index, typename T::handle& handle, std::barrier<>& a, std::atomic_bool& over) {
 		size_t its = 0;
 		a.arrive_and_wait();
 		while (!over) {
@@ -136,10 +141,10 @@ public:
 	}
 
 	template <typename T>
-	void per_thread(size_t thread_index, typename T::handle& handle, std::barrier<>& a) {
+	void per_thread(int thread_index, typename T::handle& handle, std::barrier<>& a) {
 		a.arrive_and_wait();
 		do {
-			for (size_t i = 0; i < CHUNK_SIZE; i++) {
+			for (int i = 0; i < CHUNK_SIZE; i++) {
 				handle.push(std::chrono::steady_clock::now().time_since_epoch().count());
 				auto popped = handle.pop();
 				assert(popped.has_value());
@@ -209,7 +214,7 @@ struct benchmark_fill : benchmark_timed<false, 1 << 28> {
 	benchmark_fill(const benchmark_info& info) : results(info.num_threads) { }
 
 	template <typename T>
-	void per_thread(size_t thread_index, typename T::handle& handle, std::barrier<>& a) {
+	void per_thread(int thread_index, typename T::handle& handle, std::barrier<>& a) {
 		a.arrive_and_wait();
 		while (handle.push(thread_index + 1)) {
 			results[thread_index]++;
@@ -218,13 +223,14 @@ struct benchmark_fill : benchmark_timed<false, 1 << 28> {
 
 	template <typename T>
 	void output(T& stream) {
-		stream << static_cast<double>(std::reduce(results.begin(), results.end())) / SIZE << ',' << time_nanos;
+		// TODO: Due to overallocation this should use the actual FIFO's size and not the size defined here.
+		stream << time_nanos << ',' << static_cast<double>(std::reduce(results.begin(), results.end())) / SIZE;
 	}
 };
 
 struct benchmark_empty : benchmark_fill {
 	template <typename T>
-	void per_thread(size_t thread_index, typename T::handle& handle, std::barrier<>& a) {
+	void per_thread(int thread_index, typename T::handle& handle, std::barrier<>& a) {
 		a.arrive_and_wait();
 		while (handle.pop().has_value()) {
 			results[thread_index]++;
@@ -232,18 +238,50 @@ struct benchmark_empty : benchmark_fill {
 	}
 };
 
+struct benchmark_prodcon : benchmark_default {
+	int thread_switch;
+
+	benchmark_prodcon(const benchmark_info& info) : benchmark_default(info) {
+		const benchmark_info_prodcon& info_prodcon = reinterpret_cast<const benchmark_info_prodcon&>(info);
+		thread_switch = info.num_threads * info_prodcon.producers / (info_prodcon.consumers + info_prodcon.producers);
+	}
+
+	template <typename T>
+	void per_thread(int thread_index, typename T::handle& handle, std::barrier<>& a, std::atomic_bool& over) {
+		size_t its = 0;
+		a.arrive_and_wait();
+		while (!over) {
+			if (thread_index < thread_switch) {
+				handle.push(5);
+			} else {
+				handle.pop();
+			}
+			its++;
+		}
+		results[thread_index] = its;
+	}
+
+	template <typename T>
+	void output(T& stream) {
+		stream << std::min(
+			std::reduce(results.begin(), results.begin() + thread_switch),
+			std::reduce(results.begin() + thread_switch, results.end()))
+		/ test_time_seconds;
+	}
+};
+
 template <typename BENCHMARK>
 class benchmark_provider {
 public:
 	virtual ~benchmark_provider() = default;
-	virtual BENCHMARK test(thread_pool& pool, size_t num_threads, size_t test_time_seconds, double prefill_amount) const = 0;
+	virtual BENCHMARK test(thread_pool& pool, const benchmark_info& info, double prefill_amount) const = 0;
 	virtual const std::string& get_name() const = 0;
 
 protected:
 	template <fifo FIFO>
-	static BENCHMARK test_single(thread_pool& pool, FIFO& fifo, size_t num_threads, size_t test_time_seconds, double prefill_amount) {
+	static BENCHMARK test_single(thread_pool& pool, FIFO& fifo, const benchmark_info& info, double prefill_amount) {
 		std::vector<typename FIFO::handle> handles;
-		handles.reserve(num_threads);
+		handles.reserve(info.num_threads);
 		std::atomic_size_t s = 0;
 		std::condition_variable cv;
 		std::mutex m;
@@ -263,15 +301,15 @@ protected:
 			if (BENCHMARK::PREFILL_IN_ORDER && idx != 0) {
 				return;
 			}
-			for (size_t i = 0; i < prefill_amount * BENCHMARK::SIZE / (BENCHMARK::PREFILL_IN_ORDER ? 1 : num_threads); i++) {
+			for (size_t i = 0; i < prefill_amount * BENCHMARK::SIZE / (BENCHMARK::PREFILL_IN_ORDER ? 1 : info.num_threads); i++) {
 				handles[idx].push(i + 1);
 			}
-		}, num_threads, true);
+		}, info.num_threads, true);
 
 		std::atomic_bool over = false;
-		BENCHMARK b{benchmark_info{num_threads, test_time_seconds}};
+		BENCHMARK b{info};
 
-		auto joined = std::async(&thread_pool::do_work, &pool, [&](size_t i, std::barrier<>& a) {
+		auto joined = std::async(&thread_pool::do_work, &pool, [&](int i, std::barrier<>& a) {
 			// Make sure handle is on the stack.
 			typename FIFO::handle handle = std::move(handles[i]);
 			if constexpr (BENCHMARK::HAS_TIMEOUT) {
@@ -279,12 +317,12 @@ protected:
 			} else {
 				b.template per_thread<FIFO>(i, handle, a);
 			}
-		}, num_threads, false);
+		}, info.num_threads, false);
 		// We signal, then start taking the time because some threads might not have arrived at the signal.
 		pool.signal_and_wait();
 		auto start = std::chrono::steady_clock::now();
 		if constexpr (BENCHMARK::HAS_TIMEOUT) {
-			std::this_thread::sleep_until(start + std::chrono::seconds(test_time_seconds));
+			std::this_thread::sleep_until(start + std::chrono::seconds(info.test_time_seconds));
 			over = true;
 
 			if (joined.wait_for(std::chrono::seconds(10)) == std::future_status::timeout) {
@@ -311,9 +349,9 @@ public:
 		return name;
 	}
 
-	BENCHMARK test(thread_pool& pool, size_t num_threads, size_t test_time_seconds, double prefill_amount) const override {
-		FIFO fifo = std::apply([&](Args... args) { return FIFO{ num_threads, BENCHMARK::SIZE, args... }; }, args);
-		return benchmark_provider<BENCHMARK>::template test_single<FIFO>(pool, fifo, num_threads, test_time_seconds, prefill_amount);
+	BENCHMARK test(thread_pool& pool, const benchmark_info& info, double prefill_amount) const override {
+		FIFO fifo = std::apply([&](Args... args) { return FIFO{ info.num_threads, BENCHMARK::SIZE, args... }; }, args);
+		return benchmark_provider<BENCHMARK>::template test_single<FIFO>(pool, fifo, info, prefill_amount);
 	}
 
 private:
@@ -359,17 +397,17 @@ class benchmark_provider_relaxed : public benchmark_provider<BENCHMARK> {
 			return name;
 		}
 
-		BENCHMARK test(thread_pool& pool, size_t num_threads, size_t test_time_seconds, double prefill_amount) const override {
-			switch (num_threads) {
-			case 1: return test_helper<relaxed_fifo<size_t, 1 * BLOCK_MULTIPLIER, CELLS_PER_BLOCK, BITSET_TYPE>>(pool, num_threads, test_time_seconds, prefill_amount);
-			case 2: return test_helper<relaxed_fifo<size_t, 2 * BLOCK_MULTIPLIER, CELLS_PER_BLOCK, BITSET_TYPE>>(pool, num_threads, test_time_seconds, prefill_amount);
-			case 4: return test_helper<relaxed_fifo<size_t, 4 * BLOCK_MULTIPLIER, CELLS_PER_BLOCK, BITSET_TYPE>>(pool, num_threads, test_time_seconds, prefill_amount);
-			case 8: return test_helper<relaxed_fifo<size_t, 8 * BLOCK_MULTIPLIER, CELLS_PER_BLOCK, BITSET_TYPE>>(pool, num_threads, test_time_seconds, prefill_amount);
-			case 16: return test_helper<relaxed_fifo<size_t, 16 * BLOCK_MULTIPLIER, CELLS_PER_BLOCK, BITSET_TYPE>>(pool, num_threads, test_time_seconds, prefill_amount);
-			case 32: return test_helper<relaxed_fifo<size_t, 32 * BLOCK_MULTIPLIER, CELLS_PER_BLOCK, BITSET_TYPE>>(pool, num_threads, test_time_seconds, prefill_amount);
-			case 64: return test_helper<relaxed_fifo<size_t, 64 * BLOCK_MULTIPLIER, CELLS_PER_BLOCK, BITSET_TYPE>>(pool, num_threads, test_time_seconds, prefill_amount);
-			case 128: return test_helper<relaxed_fifo<size_t, 128 * BLOCK_MULTIPLIER, CELLS_PER_BLOCK, BITSET_TYPE>>(pool, num_threads, test_time_seconds, prefill_amount);
-			case 256: return test_helper<relaxed_fifo<size_t, 256 * BLOCK_MULTIPLIER, CELLS_PER_BLOCK, BITSET_TYPE>>(pool, num_threads, test_time_seconds, prefill_amount);
+		BENCHMARK test(thread_pool& pool, const benchmark_info& info, double prefill_amount) const override {
+			switch (info.num_threads) {
+			case 1: return test_helper<relaxed_fifo<size_t, 1 * BLOCK_MULTIPLIER, CELLS_PER_BLOCK, BITSET_TYPE>>(pool, info, prefill_amount);
+			case 2: return test_helper<relaxed_fifo<size_t, 2 * BLOCK_MULTIPLIER, CELLS_PER_BLOCK, BITSET_TYPE>>(pool, info, prefill_amount);
+			case 4: return test_helper<relaxed_fifo<size_t, 4 * BLOCK_MULTIPLIER, CELLS_PER_BLOCK, BITSET_TYPE>>(pool, info, prefill_amount);
+			case 8: return test_helper<relaxed_fifo<size_t, 8 * BLOCK_MULTIPLIER, CELLS_PER_BLOCK, BITSET_TYPE>>(pool, info, prefill_amount);
+			case 16: return test_helper<relaxed_fifo<size_t, 16 * BLOCK_MULTIPLIER, CELLS_PER_BLOCK, BITSET_TYPE>>(pool, info, prefill_amount);
+			case 32: return test_helper<relaxed_fifo<size_t, 32 * BLOCK_MULTIPLIER, CELLS_PER_BLOCK, BITSET_TYPE>>(pool, info, prefill_amount);
+			case 64: return test_helper<relaxed_fifo<size_t, 64 * BLOCK_MULTIPLIER, CELLS_PER_BLOCK, BITSET_TYPE>>(pool, info, prefill_amount);
+			case 128: return test_helper<relaxed_fifo<size_t, 128 * BLOCK_MULTIPLIER, CELLS_PER_BLOCK, BITSET_TYPE>>(pool, info, prefill_amount);
+			case 256: return test_helper<relaxed_fifo<size_t, 256 * BLOCK_MULTIPLIER, CELLS_PER_BLOCK, BITSET_TYPE>>(pool, info, prefill_amount);
 			default: throw std::runtime_error("Unsupported thread count!");
 			}
 		}
@@ -378,9 +416,9 @@ class benchmark_provider_relaxed : public benchmark_provider<BENCHMARK> {
 		std::string name;
 
 		template <typename FIFO>
-		static BENCHMARK test_helper(thread_pool& pool, size_t num_threads, size_t test_time_seconds, double prefill_amount) {
-			FIFO fifo{ num_threads, BENCHMARK::SIZE };
-			return benchmark_provider<BENCHMARK>::template test_single(pool, fifo, num_threads, test_time_seconds, prefill_amount);
+		static BENCHMARK test_helper(thread_pool& pool, const benchmark_info& info, double prefill_amount) {
+			FIFO fifo{ info.num_threads, BENCHMARK::SIZE };
+			return benchmark_provider<BENCHMARK>::template test_single(pool, fifo, info, prefill_amount);
 		}
 };
 

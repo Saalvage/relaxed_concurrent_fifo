@@ -81,7 +81,7 @@ private:
 
 public:
 	// TODO: Remove unused parameter!!
-	relaxed_fifo([[maybe_unused]] size_t thread_count, size_t size) :
+	relaxed_fifo([[maybe_unused]] int thread_count, size_t size) :
 			window_count(std::max<size_t>(4, make_po2(size / BLOCKS_PER_WINDOW / CELLS_PER_BLOCK))),
 			window_count_mod_mask(window_count - 1),
 			buffer(std::make_unique<window_t[]>(window_count)) {

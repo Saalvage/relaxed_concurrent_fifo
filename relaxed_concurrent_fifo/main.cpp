@@ -148,9 +148,9 @@ void test_continuous_bitset_claim() {
 	}
 }
 
-template <typename BENCHMARK>
+template <typename BENCHMARK, typename BENCHMARK_DATA_TYPE = benchmark_info, typename... Args>
 void run_benchmark(thread_pool& pool, const std::string& test_name, const std::vector<std::unique_ptr<benchmark_provider<BENCHMARK>>>& instances, double prefill,
-	const std::vector<size_t>& processor_counts, int test_iterations, int test_time_seconds) {
+	const std::vector<int>& processor_counts, int test_iterations, int test_time_seconds, const Args&... args) {
 	constexpr const char* format = "fifo-{}-{}-{:%FT%H-%M-%S}.csv";
 
 	if (BENCHMARK::HAS_TIMEOUT) {
@@ -179,10 +179,11 @@ void run_benchmark(thread_pool& pool, const std::string& test_name, const std::v
 		std::cout << "Test run " << (i + 1) << " of " << test_iterations << std::endl;
 		for (const auto& imp : instances) {
 			std::cout << "Testing " << imp->get_name() << std::endl;
-			for (auto i : processor_counts) {
-				std::cout << "With " << i << " processors" << std::endl;
-				file << imp->get_name() << "," << i << ',';
-				imp->test(pool, i, test_time_seconds, prefill).output(file);
+			for (auto threads : processor_counts) {
+				std::cout << "With " << threads << " processors" << std::endl;
+				file << imp->get_name() << "," << threads << ',';
+				BENCHMARK_DATA_TYPE data{threads, test_time_seconds, args...};
+				imp->test(pool, data, prefill).output(file);
 				file << '\n';
 			}
 		}
@@ -322,8 +323,8 @@ int main() {
 	}, std::thread::hardware_concurrency(), true);
 #endif // __GNUC__
 
-	std::vector<size_t> processor_counts;
-	for (size_t i = 1; i <= std::thread::hardware_concurrency(); i *= 2) {
+	std::vector<int> processor_counts;
+	for (int i = 1; i <= static_cast<int>(std::thread::hardware_concurrency()); i *= 2) {
 		processor_counts.emplace_back(i);
 	}
 
@@ -340,6 +341,7 @@ int main() {
 		"[6] Empty\n"
 		"[7] Strong Scaling\n"
 		"[8] Bitset Size Comparison\n"
+		"[9] Producer-Consumer\n"
 		"Input: ";
 	std::cin >> input;
 
@@ -419,6 +421,17 @@ int main() {
 		instances.push_back(std::make_unique<benchmark_provider_relaxed<benchmark_default, 8, 127, uint64_t>>("64,bbq-8-127"));
 		run_benchmark(pool, "bitset-sizes", instances, 0.5, processor_counts, TEST_ITERATIONS, TEST_TIME_SECONDS);
 		} break;
+	case 9:
+		int producers, consumers;
+		std::cout << "Enter producers: ";
+		std::cin >> producers;
+		std::cout << "Enter consumers: ";
+		std::cin >> consumers;
+		std::vector<std::unique_ptr<benchmark_provider<benchmark_prodcon>>> instances;
+		add_all_benchmarking(instances);
+		run_benchmark<benchmark_prodcon, benchmark_info_prodcon, int, int>(pool, std::format("prodcon-{}-{}", producers, consumers),
+			instances, 0.5, { processor_counts.back() }, TEST_ITERATIONS, TEST_TIME_SECONDS, producers, consumers);
+		break;
 	}
 
 	return 0;

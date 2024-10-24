@@ -9,7 +9,7 @@ private:
 	std::atomic_int curr_thread_id = 0;
 
 public:
-	adapter(size_t thread_count, size_t) : queue{static_cast<int>(thread_count)} { }
+	adapter(int thread_count, size_t) : queue{thread_count} { }
 
 	struct handle {
 	private:

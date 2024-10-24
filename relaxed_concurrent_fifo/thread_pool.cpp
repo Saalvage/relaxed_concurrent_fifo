@@ -9,9 +9,9 @@
 #endif // _POSIX_VERSION
 
 thread_pool::thread_pool() : sems(std::thread::hardware_concurrency()), barrier(std::thread::hardware_concurrency() + 2) {
-	auto thread_count = std::thread::hardware_concurrency();
+	int thread_count = static_cast<int>(std::thread::hardware_concurrency());
 	threads.reserve(thread_count);
-	auto lambda = [this](std::stop_token token, size_t i) {
+	auto lambda = [this](std::stop_token token, int i) {
 #ifdef _POSIX_VERSION
 		cpu_set_t cpu_set;
 		CPU_ZERO(&cpu_set);
@@ -30,7 +30,7 @@ thread_pool::thread_pool() : sems(std::thread::hardware_concurrency()), barrier(
 			barrier.arrive_and_wait();
 		}
 	};
-	for (size_t i = 0; i < thread_count; i++) {
+	for (int i = 0; i < thread_count; i++) {
 		threads.emplace_back(lambda, ss.get_token(), i);
 	}
 }
@@ -49,11 +49,11 @@ thread_pool::~thread_pool() {
 /// <param name="func">Must arrive at the barrier.</param>
 /// <param name="thread_count"></param>
 /// <param name="do_signaling">Whether the caller wants to manually signal the start of the execution.</param>
-void thread_pool::do_work(std::function<void(size_t, std::barrier<>&)> func, size_t thread_count, bool do_signaling) {
+void thread_pool::do_work(std::function<void(int, std::barrier<>&)> func, int thread_count, bool do_signaling) {
 	assert(thread_count <= threads.size());
 
 	per_thread = std::move(func);
-	for (size_t i = 0; i < thread_count; i++) {
+	for (int i = 0; i < thread_count; i++) {
 		sems[i]->release();
 	}
 	if (thread_count < threads.size()) {

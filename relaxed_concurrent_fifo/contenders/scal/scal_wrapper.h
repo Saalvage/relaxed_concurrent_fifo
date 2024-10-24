@@ -45,51 +45,51 @@ public:
 template <typename T>
 struct ws_k_fifo : scal_wrapper_base<T, scal::BoundedSizeKFifo> {
 public:
-	ws_k_fifo(size_t thread_count, size_t size, size_t k) : scal_wrapper_base<T, scal::BoundedSizeKFifo>{thread_count * k, std::max<size_t>(4, size / k / thread_count)} { }
+	ws_k_fifo(int thread_count, size_t size, size_t k) : scal_wrapper_base<T, scal::BoundedSizeKFifo>{thread_count * k, std::max<size_t>(4, size / k / thread_count)} { }
 };
 
 template <typename T>
 struct ss_k_fifo : scal_wrapper_base<T, scal::BoundedSizeKFifo> {
 public:
-	ss_k_fifo([[maybe_unused]] size_t thread_count, size_t size, size_t k) : scal_wrapper_base<T, scal::BoundedSizeKFifo>{ k, std::max<size_t>(4, size / k) } {}
+	ss_k_fifo([[maybe_unused]] int thread_count, size_t size, size_t k) : scal_wrapper_base<T, scal::BoundedSizeKFifo>{ k, std::max<size_t>(4, size / k) } {}
 };
 
 template <typename T>
 struct rts_queue : scal_wrapper_base<T, RTSQueue> {
 public:
-	rts_queue(size_t thread_count, [[maybe_unused]] size_t size) {
+	rts_queue(int thread_count, [[maybe_unused]] size_t size) {
 		scal_wrapper_base<T, RTSQueue>::queue.initialize(thread_count);
 	}
 };
 
 template <typename T>
 struct ws_segment_queue : scal_wrapper_base<T, scal_sq::SegmentQueue> {
-	ws_segment_queue(size_t thread_count, [[maybe_unused]] size_t size, size_t s) : scal_wrapper_base<T, scal_sq::SegmentQueue>{thread_count * s} { }
+	ws_segment_queue(int thread_count, [[maybe_unused]] size_t size, size_t s) : scal_wrapper_base<T, scal_sq::SegmentQueue>{thread_count * s} { }
 };
 
 template <typename T>
 struct ss_segment_queue : scal_wrapper_base<T, scal_sq::SegmentQueue> {
-	ss_segment_queue([[maybe_unused]] size_t thread_count, [[maybe_unused]] size_t size, size_t s) : scal_wrapper_base<T, scal_sq::SegmentQueue>{ s } {}
+	ss_segment_queue([[maybe_unused]] int thread_count, [[maybe_unused]] size_t size, size_t s) : scal_wrapper_base<T, scal_sq::SegmentQueue>{ s } {}
 };
 
 template <typename T>
 struct ws_random_dequeue_queue : scal_wrapper_base<T, scal::RandomDequeueQueue> {
-	ws_random_dequeue_queue(size_t thread_count, [[maybe_unused]] size_t size, size_t quasi_factor, size_t max_retries) : scal_wrapper_base<T, scal::RandomDequeueQueue>{ thread_count * quasi_factor, max_retries } {}
+	ws_random_dequeue_queue(int thread_count, [[maybe_unused]] size_t size, size_t quasi_factor, size_t max_retries) : scal_wrapper_base<T, scal::RandomDequeueQueue>{ thread_count * quasi_factor, max_retries } {}
 };
 
 template <typename T>
 struct ss_random_dequeue_queue : scal_wrapper_base<T, scal::RandomDequeueQueue> {
-	ss_random_dequeue_queue([[maybe_unused]] size_t thread_count, [[maybe_unused]] size_t size, size_t quasi_factor, size_t max_retries) : scal_wrapper_base<T, scal::RandomDequeueQueue>{ quasi_factor, max_retries } {}
+	ss_random_dequeue_queue([[maybe_unused]] int thread_count, [[maybe_unused]] size_t size, size_t quasi_factor, size_t max_retries) : scal_wrapper_base<T, scal::RandomDequeueQueue>{ quasi_factor, max_retries } {}
 };
 
 template <typename T>
 struct ws_lru_distributed_queue : scal_wrapper_base<T, scal::LRUDistributedQueue> {
-	ws_lru_distributed_queue(size_t thread_count, [[maybe_unused]] size_t size, size_t quasi_factor) : scal_wrapper_base<T, scal::LRUDistributedQueue>{ thread_count * quasi_factor } {}
+	ws_lru_distributed_queue(int thread_count, [[maybe_unused]] size_t size, size_t quasi_factor) : scal_wrapper_base<T, scal::LRUDistributedQueue>{ thread_count * quasi_factor } {}
 };
 
 template <typename T>
 struct ss_lru_distributed_queue : scal_wrapper_base<T, scal::LRUDistributedQueue> {
-	ss_lru_distributed_queue([[maybe_unused]] size_t thread_count, [[maybe_unused]] size_t size, size_t quasi_factor) : scal_wrapper_base<T, scal::LRUDistributedQueue>{ quasi_factor } {}
+	ss_lru_distributed_queue([[maybe_unused]] int thread_count, [[maybe_unused]] size_t size, size_t quasi_factor) : scal_wrapper_base<T, scal::LRUDistributedQueue>{ quasi_factor } {}
 };
 
 #endif // BSKFIFO_WRAPPER_H_INCLUDED
