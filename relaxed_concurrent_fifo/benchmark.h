@@ -26,10 +26,10 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wvla"
 
-#include "contenders/LPRQ/LPRQueue.hpp"
+#include "contenders/LCRQ/LCRQueue.hpp"
 
 template <typename T>
-using LPRQWrapped = LPRQueue<T>;
+using LCRQWrapped = LCRQueue<T>;
 
 #include "contenders/scal/scal_wrapper.h"
 #include "contenders/scal/util/threadlocals.h"
